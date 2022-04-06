@@ -107,6 +107,7 @@ Done
 - [sntp](#sntp-query-sntp-server-ip-sntp-server-port)
 - [state](#state)
 - [srp](README_SRP.md)
+- [tcp](README_TCP.md)
 - [thread](#thread-start)
 - [trel](#trel)
 - [tvcheck](#tvcheck-enable)
@@ -321,17 +322,6 @@ Set jitter (in seconds) for Backbone Router registration for Thread 1.2 FTD.
 
 ```bash
 > bbr jitter 10
-Done
-```
-
-### bbr skipseqnuminc
-
-Skip increase of Sequence Number when updating the local BBR Dataset from the Network Data.
-
-Only for testing/reference device.
-
-```bash
-> bbr skipseqnuminc
 Done
 ```
 

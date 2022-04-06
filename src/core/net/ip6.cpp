@@ -456,7 +456,7 @@ Error Ip6::SendDatagram(Message &aMessage, MessageInfo &aMessageInfo, uint8_t aI
 
     header.Init();
     header.SetDscp(PriorityToDscp(aMessage.GetPriority()));
-    header.SetEcn(aMessageInfo.mEcn);
+    header.SetEcn(aMessageInfo.GetEcn());
     header.SetPayloadLength(payloadLength);
     header.SetNextHeader(aIpProto);
 
@@ -651,6 +651,7 @@ Error Ip6::FragmentDatagram(Message &aMessage, uint8_t aIpProto)
         fragmentHeader.SetOffset(offset);
 
         VerifyOrExit((fragment = NewMessage(0)) != nullptr, error = kErrorNoBufs);
+        IgnoreError(fragment->SetPriority(aMessage.GetPriority()));
         SuccessOrExit(error = fragment->SetLength(aMessage.GetOffset() + sizeof(fragmentHeader) + payloadFragment));
 
         header.SetPayloadLength(payloadFragment + sizeof(fragmentHeader));
@@ -739,7 +740,7 @@ Error Ip6::HandleFragment(Message &aMessage, Netif *aNetif, MessageInfo &aMessag
         mReassemblyList.Enqueue(*message);
         SuccessOrExit(error = message->SetLength(aMessage.GetOffset()));
 
-        message->SetTimeout(kIp6ReassemblyTimeout);
+        message->SetTimestampToNow();
         message->SetOffset(0);
         message->SetDatagramTag(fragmentHeader.GetIdentification());
 
@@ -817,13 +818,11 @@ void Ip6::HandleTimeTick(void)
 
 void Ip6::UpdateReassemblyList(void)
 {
+    TimeMilli now = TimerMilli::GetNow();
+
     for (Message &message : mReassemblyList)
     {
-        if (message.GetTimeout() > 0)
-        {
-            message.DecrementTimeout();
-        }
-        else
+        if (now - message.GetTimestamp() >= TimeMilli::SecToMsec(kIp6ReassemblyTimeout))
         {
             LogNote("Reassembly timeout.");
             SendIcmpError(message, Icmp::Header::kTypeTimeExceeded, Icmp::Header::kCodeFragmReasTimeEx);
@@ -1138,6 +1137,7 @@ start:
     messageInfo.SetPeerAddr(header.GetSource());
     messageInfo.SetSockAddr(header.GetDestination());
     messageInfo.SetHopLimit(header.GetHopLimit());
+    messageInfo.SetEcn(header.GetEcn());
     messageInfo.SetLinkInfo(aLinkMessageInfo);
 
     // determine destination of packet
@@ -1212,7 +1212,7 @@ start:
         {
             // Remove encapsulating header and start over.
             aMessage.RemoveHeader(aMessage.GetOffset());
-            Get<MeshForwarder>().LogMessage(MeshForwarder::kMessageReceive, aMessage, nullptr, kErrorNone);
+            Get<MeshForwarder>().LogMessage(MeshForwarder::kMessageReceive, aMessage);
             goto start;
         }
 
