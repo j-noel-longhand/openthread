@@ -120,6 +120,32 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_ENABLE
+ *
+ * Define as 1 to enable collision avoidance delay feature, which adds a delay wait time after a successful frame tx
+ * to a neighbor which is expected to forward the frame. This delay is applied before the next direct frame tx (towards
+ * any neighbor) on an FTD.
+ *
+ * The delay interval is specified by `OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_INTERVAL` (in milliseconds).
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_ENABLE
+#define OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_ENABLE 1
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_INTERVAL
+ *
+ * Specifies the collision avoidance delay interval in milliseconds. This is added after a successful frame tx to a
+ * neighbor that is expected to forward the frame (when `OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_ENABLE` is
+ * enabled).
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_INTERVAL
+#define OPENTHREAD_CONFIG_MAC_COLLISION_AVOIDANCE_DELAY_INTERVAL 8
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_MAC_RETRY_SUCCESS_HISTOGRAM_ENABLE
  *
  * Define to 1 to enable MAC retry packets histogram analysis.
@@ -441,6 +467,18 @@
 #endif
 
 /**
+ * @def OPENTHREAD_CONFIG_CSL_TRANSMIT_TIME_AHEAD
+ *
+ * Transmission scheduling and ramp up time needed for the CSL transmitter to be ready, in units of microseconds.
+ * This time must include at least the radio's turnaround time between end of CCA and start of preamble transmission.
+ * To avoid early CSL transmission it also must not be configured higher than the actual scheduling and ramp up time.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_CSL_TRANSMIT_TIME_AHEAD
+#define OPENTHREAD_CONFIG_CSL_TRANSMIT_TIME_AHEAD 40
+#endif
+
+/**
  * @def OPENTHREAD_CONFIG_CSL_RECEIVE_TIME_AHEAD
  *
  * Reception scheduling and ramp up time needed for the CSL receiver to be ready, in units of microseconds.
@@ -471,6 +509,39 @@
  */
 #ifndef OPENTHREAD_CONFIG_MAC_SCAN_DURATION
 #define OPENTHREAD_CONFIG_MAC_SCAN_DURATION 300
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_BEACON_PAYLOAD_PARSING_ENABLE
+ *
+ * This setting configures if the beacon payload parsing needs to be enabled in MAC. This is optional and is disabled by
+ * default because Thread 1.2.1 has removed support for beacon payloads.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_BEACON_PAYLOAD_PARSING_ENABLE
+#define OPENTHREAD_CONFIG_MAC_BEACON_PAYLOAD_PARSING_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_OUTGOING_BEACON_PAYLOAD_ENABLE
+ *
+ * This setting configures if the beacon payload needs to be enabled in outgoing beacon frames. This is optional and is
+ * disabled by default because Thread 1.2.1 has removed support for beacon payloads.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_OUTGOING_BEACON_PAYLOAD_ENABLE
+#define OPENTHREAD_CONFIG_MAC_OUTGOING_BEACON_PAYLOAD_ENABLE 0
+#endif
+
+/**
+ * @def OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT
+ *
+ * This setting specifies the timeout for receiving the Data Frame (in msec) - after an ACK with FP bit set was
+ * received.
+ *
+ */
+#ifndef OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT
+#define OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT 100
 #endif
 
 #endif // CONFIG_MAC_H_

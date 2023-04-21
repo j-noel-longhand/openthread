@@ -39,6 +39,7 @@
 #include <stdint.h>
 
 #include <openthread/message.h>
+#include <openthread/nat64.h>
 #include <openthread/platform/messagepool.h>
 
 #include "common/as_core_type.hpp"
@@ -70,6 +71,7 @@ namespace ot {
 
 namespace Crypto {
 
+class AesCcm;
 class Sha256;
 class HmacSha256;
 
@@ -185,10 +187,10 @@ public:
 protected:
     struct Metadata
     {
-        Message *    mNext;        // Next message in a doubly linked list.
-        Message *    mPrev;        // Previous message in a doubly linked list.
+        Message     *mNext;        // Next message in a doubly linked list.
+        Message     *mPrev;        // Previous message in a doubly linked list.
         MessagePool *mMessagePool; // Message pool for this message.
-        void *       mQueue;       // The queue where message is queued (if any). Queue type from `mInPriorityQ`.
+        void        *mQueue;       // The queue where message is queued (if any). Queue type from `mInPriorityQ`.
         uint32_t     mDatagramTag; // The datagram tag used for 6LoWPAN frags or IPv6fragmentation.
         TimeMilli    mTimestamp;   // The message timestamp.
         uint16_t     mReserved;    // Number of reserved bytes (for header).
@@ -203,15 +205,16 @@ protected:
 #endif
         ChildMask mChildMask; // ChildMask to indicate which sleepy children need to receive this.
 
-        uint8_t mType : 3;          // The message type.
-        uint8_t mSubType : 4;       // The message sub type.
-        bool    mDirectTx : 1;      // Whether a direct transmission is required.
-        bool    mLinkSecurity : 1;  // Whether link security is enabled.
-        uint8_t mPriority : 2;      // The message priority level (higher value is higher priority).
-        bool    mInPriorityQ : 1;   // Whether the message is queued in normal or priority queue.
-        bool    mTxSuccess : 1;     // Whether the direct tx of the message was successful.
-        bool    mDoNotEvict : 1;    // Whether this message may be evicted.
-        bool    mMulticastLoop : 1; // Whether this multicast message may be looped back.
+        uint8_t mType : 3;             // The message type.
+        uint8_t mSubType : 4;          // The message sub type.
+        bool    mDirectTx : 1;         // Whether a direct transmission is required.
+        bool    mLinkSecurity : 1;     // Whether link security is enabled.
+        uint8_t mPriority : 2;         // The message priority level (higher value is higher priority).
+        bool    mInPriorityQ : 1;      // Whether the message is queued in normal or priority queue.
+        bool    mTxSuccess : 1;        // Whether the direct tx of the message was successful.
+        bool    mDoNotEvict : 1;       // Whether this message may be evicted.
+        bool    mMulticastLoop : 1;    // Whether this multicast message may be looped back.
+        bool    mResolvingAddress : 1; // Whether the message is pending an address query resolution.
 #if OPENTHREAD_CONFIG_MULTI_RADIO
         uint8_t mRadioType : 2;      // The radio link type the message was received on, or should be sent on.
         bool    mIsRadioTypeSet : 1; // Whether the radio type is set.
@@ -229,13 +232,13 @@ protected:
     static constexpr uint16_t kBufferDataSize     = kBufferSize - sizeof(otMessageBuffer);
     static constexpr uint16_t kHeadBufferDataSize = kBufferDataSize - sizeof(Metadata);
 
-    Metadata &      GetMetadata(void) { return mBuffer.mHead.mMetadata; }
+    Metadata       &GetMetadata(void) { return mBuffer.mHead.mMetadata; }
     const Metadata &GetMetadata(void) const { return mBuffer.mHead.mMetadata; }
 
-    uint8_t *      GetFirstData(void) { return mBuffer.mHead.mData; }
+    uint8_t       *GetFirstData(void) { return mBuffer.mHead.mData; }
     const uint8_t *GetFirstData(void) const { return mBuffer.mHead.mData; }
 
-    uint8_t *      GetData(void) { return mBuffer.mData; }
+    uint8_t       *GetData(void) { return mBuffer.mData; }
     const uint8_t *GetData(void) const { return mBuffer.mData; }
 
 private:
@@ -250,17 +253,19 @@ private:
     } mBuffer;
 };
 
-static_assert(sizeof(Buffer) >= kBufferSize, "Buffer size if not valid");
+static_assert(sizeof(Buffer) >= kBufferSize,
+              "Buffer size is not valid. Increase OPENTHREAD_CONFIG_MESSAGE_BUFFER_SIZE.");
 
 /**
  * This class represents a message.
  *
  */
-class Message : public otMessage, public Buffer
+class Message : public otMessage, public Buffer, public GetProvider<Message>
 {
     friend class Checksum;
     friend class Crypto::HmacSha256;
     friend class Crypto::Sha256;
+    friend class Crypto::AesCcm;
     friend class MessagePool;
     friend class MessageQueue;
     friend class PriorityQueue;
@@ -276,7 +281,8 @@ public:
         kType6lowpan      = 1, ///< A 6lowpan frame
         kTypeSupervision  = 2, ///< A child supervision frame.
         kTypeMacEmptyData = 3, ///< An empty MAC data frame.
-        kTypeOther        = 4, ///< Other (data) message.
+        kTypeIp4          = 4, ///< A full uncompressed IPv4 packet, for NAT64.
+        kTypeOther        = 5, ///< Other (data) message.
     };
 
     /**
@@ -406,6 +412,14 @@ public:
     private:
         static const otMessageSettings kDefault;
     };
+
+    /**
+     * This method returns a reference to the OpenThread Instance which owns the `Message`.
+     *
+     * @returns A reference to the `Instance`.
+     *
+     */
+    Instance &GetInstance(void) const;
 
     /**
      * This method frees this message buffer.
@@ -594,12 +608,47 @@ public:
     }
 
     /**
-     * This method removes header bytes from the message.
+     * This method removes header bytes from the message at start of message.
      *
-     * @param[in]  aLength  Number of header bytes to remove.
+     * The caller MUST ensure that message contains the bytes to be removed, i.e. `aOffset` is smaller than the message
+     * length.
+     *
+     * @param[in]  aLength  Number of header bytes to remove from start of `Message`.
      *
      */
     void RemoveHeader(uint16_t aLength);
+
+    /**
+     * This method removes header bytes from the message at a given offset.
+     *
+     * This method shrinks the message. The existing header bytes before @p aOffset are copied forward and replace the
+     * removed bytes.
+     *
+     * The caller MUST ensure that message contains the bytes to be removed, i.e. `aOffset + aLength` is smaller than
+     * the message length.
+     *
+     * @param[in]  aOffset  The offset to start removing.
+     * @param[in]  aLength  Number of header bytes to remove.
+     *
+     */
+    void RemoveHeader(uint16_t aOffset, uint16_t aLength);
+
+    /**
+     * This method grows the message to make space for new header bytes at a given offset.
+     *
+     * This method grows the message header (similar to `PrependBytes()`). The existing header bytes from start to
+     * `aOffset + aLength` are then copied backward to make room for the new header bytes. Note that this method does
+     * not change the bytes from @p aOffset up @p aLength (the new inserted header range). Caller can write to this
+     * range to update the bytes after successful return from this method.
+     *
+     * @param[in] aOffset   The offset at which to insert the header bytes
+     * @param[in] aLength   Number of header bytes to insert.
+     *
+     * @retval kErrorNone    Successfully grown the message and copied the existing header bytes.
+     * @retval kErrorNoBufs  Insufficient available buffers to grow the message.
+     *
+     */
+    Error InsertHeader(uint16_t aOffset, uint16_t aLength);
 
     /**
      * This method appends bytes to the end of the message.
@@ -649,6 +698,24 @@ public:
         static_assert(!TypeTraits::IsPointer<ObjectType>::kValue, "ObjectType must not be a pointer");
 
         return AppendBytes(&aObject, sizeof(ObjectType));
+    }
+
+    /**
+     * This method appends bytes from a given `Data` instance to the end of the message.
+     *
+     * On success, this method grows the message by the size of the appended data.
+     *
+     * @tparam    kDataLengthType   Determines the data length type (`uint8_t` or `uint16_t`).
+     *
+     * @param[in] aData      A reference to `Data` to append to the message.
+     *
+     * @retval kErrorNone    Successfully appended the bytes from @p aData.
+     * @retval kErrorNoBufs  Insufficient available buffers to grow the message.
+     *
+     */
+    template <DataLengthType kDataLengthType> Error AppendData(const Data<kDataLengthType> &aData)
+    {
+        return AppendBytes(aData.GetBytes(), aData.GetLength());
     }
 
     /**
@@ -778,6 +845,23 @@ public:
     void WriteBytes(uint16_t aOffset, const void *aBuf, uint16_t aLength);
 
     /**
+     * This method writes bytes read from another or potentially the same message to the message at a given offset.
+     *
+     * This method will not resize the message. The bytes to write (with @p aLength) MUST fit within the existing
+     * message buffer (from the given @p aWriteOffset up to the message's length).
+     *
+     * This method can be used to copy bytes within the same message in either direction, i.e., copy forward where
+     * `aWriteOffset > aReadOffset` or copy backward where `aWriteOffset < aReadOffset`.
+     *
+     * @param[in] aWriteOffset  Byte offset within this message to begin writing.
+     * @param[in] aMessage      The message to read the bytes from.
+     * @param[in] aReadOffset   The offset in @p aMessage to start reading the bytes from.
+     * @param[in] aLength       The number of bytes to read from @p aMessage and write.
+     *
+     */
+    void WriteBytesFromMessage(uint16_t aWriteOffset, const Message &aMessage, uint16_t aReadOffset, uint16_t aLength);
+
+    /**
      * This methods writes an object to the message.
      *
      * This method will not resize the message. The entire given object (all its bytes) MUST fit within the existing
@@ -797,21 +881,21 @@ public:
     }
 
     /**
-     * This method copies bytes from one message to another.
+     * This method writes bytes from a given `Data` instance to the message.
      *
-     * If source and destination messages are the same, `CopyTo()` can be used to perform a backward copy, but
-     * it MUST not be used to forward copy within the same message (i.e., when source and destination messages are the
-     * same and source offset is smaller than the destination offset).
+     * This method will not resize the message. The given data to write MUST fit within the existing message buffer
+     * (from the given offset @p aOffset up to the message's length).
      *
-     * @param[in] aSourceOffset       Byte offset within the source message to begin reading.
-     * @param[in] aDestinationOffset  Byte offset within the destination message to begin writing.
-     * @param[in] aLength             Number of bytes to copy.
-     * @param[in] aMessage            Message to copy to.
+     * @tparam     kDataLengthType   Determines the data length type (`uint8_t` or `uint16_t`).
      *
-     * @returns The number of bytes copied.
+     * @param[in]  aOffset    Byte offset within the message to begin writing.
+     * @param[in]  aData      The `Data` to write to the message.
      *
      */
-    uint16_t CopyTo(uint16_t aSourceOffset, uint16_t aDestinationOffset, uint16_t aLength, Message &aMessage) const;
+    template <DataLengthType kDataLengthType> void WriteData(uint16_t aOffset, const Data<kDataLengthType> &aData)
+    {
+        WriteBytes(aOffset, aData.GetBytes(), aData.GetLength());
+    }
 
     /**
      * This method creates a copy of the message.
@@ -1031,6 +1115,23 @@ public:
     void SetDoNotEvict(bool aDoNotEvict) { GetMetadata().mDoNotEvict = aDoNotEvict; }
 
     /**
+     * This method indicates whether the message is waiting for an address query resolution.
+     *
+     * @retval TRUE   If the message is waiting for address query resolution.
+     * @retval FALSE  If the message is not waiting for address query resolution.
+     *
+     */
+    bool IsResolvingAddress(void) const { return GetMetadata().mResolvingAddress; }
+
+    /**
+     * This method sets whether the message is waiting for an address query resolution.
+     *
+     * @param[in] aResolvingAddress    TRUE if message is waiting for address resolution, FALSE otherwise.
+     *
+     */
+    void SetResolvingAddress(bool aResolvingAddress) { GetMetadata().mResolvingAddress = aResolvingAddress; }
+
+    /**
      * This method indicates whether or not link security is enabled for the message.
      *
      * @retval TRUE   If link security is enabled.
@@ -1060,7 +1161,7 @@ public:
     /**
      * This method returns the average RSS (Received Signal Strength) associated with the message.
      *
-     * @returns The current average RSS value (in dBm) or OT_RADIO_RSSI_INVALID if no average is available.
+     * @returns The current average RSS value (in dBm) or `Radio::kInvalidRssi` if no average is available.
      *
      */
     int8_t GetAverageRss(void) const { return GetMetadata().mRssAverager.GetAverage(); }
@@ -1307,11 +1408,11 @@ private:
     void SetMessageQueue(MessageQueue *aMessageQueue);
     void SetPriorityQueue(PriorityQueue *aPriorityQueue);
 
-    Message *&      Next(void) { return GetMetadata().mNext; }
+    Message       *&Next(void) { return GetMetadata().mNext; }
     Message *const &Next(void) const { return GetMetadata().mNext; }
-    Message *&      Prev(void) { return GetMetadata().mPrev; }
+    Message       *&Prev(void) { return GetMetadata().mPrev; }
 
-    static Message *      NextOf(Message *aMessage) { return (aMessage != nullptr) ? aMessage->Next() : nullptr; }
+    static Message       *NextOf(Message *aMessage) { return (aMessage != nullptr) ? aMessage->Next() : nullptr; }
     static const Message *NextOf(const Message *aMessage) { return (aMessage != nullptr) ? aMessage->Next() : nullptr; }
 
     Error ResizeMessage(uint16_t aLength);
@@ -1327,6 +1428,8 @@ class MessageQueue : public otMessageQueue
     friend class PriorityQueue;
 
 public:
+    typedef otMessageQueueInfo Info; ///< This struct represents info (number of messages/buffers) about a queue.
+
     /**
      * This enumeration represents a position (head or tail) in the queue. This is used to specify where a new message
      * should be added in the queue.
@@ -1400,13 +1503,17 @@ public:
     void DequeueAndFreeAll(void);
 
     /**
-     * This method returns the number of messages and buffers enqueued.
+     * This method gets the information about number of messages and buffers in the queue.
      *
-     * @param[out]  aMessageCount  Returns the number of messages enqueued.
-     * @param[out]  aBufferCount   Returns the number of buffers enqueued.
+     * This method updates `aInfo` and adds number of message/buffers in the message queue to the corresponding member
+     * variable in `aInfo`. The caller needs to make sure `aInfo` is initialized before calling this method (e.g.,
+     * clearing `aInfo`). Same `aInfo` can be passed in multiple calls of `GetInfo(aInfo)` on different queues to add
+     * up the number of messages/buffers on different queues.
+     *
+     * @param[out] aInfo  A reference to `Info` structure to update.ni
      *
      */
-    void GetInfo(uint16_t &aMessageCount, uint16_t &aBufferCount) const;
+    void GetInfo(Info &aInfo) const;
 
     // The following methods are intended to support range-based `for`
     // loop iteration over the queue entries and should not be used
@@ -1420,7 +1527,7 @@ public:
     Message::ConstIterator end(void) const { return Message::ConstIterator(); }
 
 private:
-    Message *      GetTail(void) { return static_cast<Message *>(mData); }
+    Message       *GetTail(void) { return static_cast<Message *>(mData); }
     const Message *GetTail(void) const { return static_cast<const Message *>(mData); }
     void           SetTail(Message *aMessage) { mData = aMessage; }
 };
@@ -1434,8 +1541,11 @@ class PriorityQueue : private Clearable<PriorityQueue>
     friend class Message;
     friend class MessageQueue;
     friend class MessagePool;
+    friend class Clearable<PriorityQueue>;
 
 public:
+    typedef otMessageQueueInfo Info; ///< This struct represents info (number of messages/buffers) about a queue.
+
     /**
      * This constructor initializes the priority queue.
      *
@@ -1514,16 +1624,7 @@ public:
     void DequeueAndFreeAll(void);
 
     /**
-     * This method returns the number of messages and buffers enqueued.
-     *
-     * @param[out]  aMessageCount  Returns the number of messages enqueued.
-     * @param[out]  aBufferCount   Returns the number of buffers enqueued.
-     *
-     */
-    void GetInfo(uint16_t &aMessageCount, uint16_t &aBufferCount) const;
-
-    /**
-     * This method returns the tail of the list (last message in the list)
+     * This method returns the tail of the list (last message in the list).
      *
      * @returns A pointer to the tail of the list.
      *
@@ -1531,12 +1632,25 @@ public:
     Message *GetTail(void) { return AsNonConst(AsConst(this)->GetTail()); }
 
     /**
-     * This method returns the tail of the list (last message in the list)
+     * This method returns the tail of the list (last message in the list).
      *
      * @returns A pointer to the tail of the list.
      *
      */
     const Message *GetTail(void) const;
+
+    /**
+     * This method gets the information about number of messages and buffers in the priority queue.
+     *
+     * This method updates `aInfo` array and adds number of message/buffers in the message queue to the corresponding
+     * member variable in `aInfo`. The caller needs to make sure `aInfo` is initialized before calling this method
+     * (e.g., clearing `aInfo`). Same `aInfo` can be passed in multiple calls of `GetInfo(aInfo)` on different queues
+     * to add up the number of messages/buffers on different queues.
+     *
+     * @param[out] aInfo  A reference to an `Info` structure to update.
+     *
+     */
+    void GetInfo(Info &aInfo) const;
 
     // The following methods are intended to support range-based `for`
     // loop iteration over the queue entries and should not be used
@@ -1592,9 +1706,28 @@ public:
      * @returns A pointer to the message or `nullptr` if no message buffers are available.
      *
      */
-    Message *Allocate(Message::Type            aType,
-                      uint16_t                 aReserveHeader = 0,
-                      const Message::Settings &aSettings      = Message::Settings::GetDefault());
+    Message *Allocate(Message::Type aType, uint16_t aReserveHeader, const Message::Settings &aSettings);
+
+    /**
+     * This method allocates a new message of a given type using default settings.
+     *
+     * @param[in]  aType           The message type.
+     *
+     * @returns A pointer to the message or `nullptr` if no message buffers are available.
+     *
+     */
+    Message *Allocate(Message::Type aType);
+
+    /**
+     * This method allocates a new message with a given type and reserved length using default settings.
+     *
+     * @param[in]  aType           The message type.
+     * @param[in]  aReserveHeader  The number of header bytes to reserve.
+     *
+     * @returns A pointer to the message or `nullptr` if no message buffers are available.
+     *
+     */
+    Message *Allocate(Message::Type aType, uint16_t aReserveHeader);
 
     /**
      * This method is used to free a message and return all message buffers to the buffer pool.
@@ -1607,7 +1740,7 @@ public:
     /**
      * This method returns the number of free buffers.
      *
-     * @returns The number of free buffers.
+     * @returns The number of free buffers, or 0xffff (UINT16_MAX) if number is unknown.
      *
      */
     uint16_t GetFreeBufferCount(void) const;
@@ -1615,10 +1748,27 @@ public:
     /**
      * This method returns the total number of buffers.
      *
-     * @returns The total number of buffers.
+     * @returns The total number of buffers, or 0xffff (UINT16_MAX) if number is unknown.
      *
      */
     uint16_t GetTotalBufferCount(void) const;
+
+    /**
+     * This method returns the maximum number of buffers in use at the same time since OT stack initialization or
+     * since last call to `ResetMaxUsedBufferCount()`.
+     *
+     * @returns The maximum number of buffers in use at the same time so far (buffer allocation watermark).
+     *
+     */
+    uint16_t GetMaxUsedBufferCount(void) const { return mMaxAllocated; }
+
+    /**
+     * This method resets the tracked maximum number of buffers in use.
+     *
+     * @sa GetMaxUsedBufferCount
+     *
+     */
+    void ResetMaxUsedBufferCount(void) { mMaxAllocated = mNumAllocated; }
 
 private:
     Buffer *NewBuffer(Message::Priority aPriority);
@@ -1626,10 +1776,13 @@ private:
     Error   ReclaimBuffers(Message::Priority aPriority);
 
 #if !OPENTHREAD_CONFIG_PLATFORM_MESSAGE_MANAGEMENT && !OPENTHREAD_CONFIG_MESSAGE_USE_HEAP_ENABLE
-    uint16_t                  mNumFreeBuffers;
     Pool<Buffer, kNumBuffers> mBufferPool;
 #endif
+    uint16_t mNumAllocated;
+    uint16_t mMaxAllocated;
 };
+
+inline Instance &Message::GetInstance(void) const { return GetMessagePool()->GetInstance(); }
 
 /**
  * @}

@@ -36,6 +36,7 @@
 #include "platform-posix.h"
 
 #include <assert.h>
+#include <inttypes.h>
 
 #include <openthread-core-config.h>
 #include <openthread/border_router.h>
@@ -122,6 +123,10 @@ static const char *getTrelRadioUrl(otPlatformConfig *aPlatformConfig)
 
 void platformInit(otPlatformConfig *aPlatformConfig)
 {
+#if OPENTHREAD_POSIX_CONFIG_BACKTRACE_ENABLE
+    platformBacktraceInit();
+#endif
+
     platformAlarmInit(aPlatformConfig->mSpeedUpFactor, aPlatformConfig->mRealTimeSignal);
     platformRadioInit(get802154RadioUrl(aPlatformConfig));
 
@@ -137,14 +142,21 @@ void platformInit(otPlatformConfig *aPlatformConfig)
     platformBackboneInit(aPlatformConfig->mBackboneInterfaceName);
 #endif
 
-#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+#if OPENTHREAD_POSIX_CONFIG_INFRA_IF_ENABLE
     ot::Posix::InfraNetif::Get().Init(aPlatformConfig->mBackboneInterfaceName);
 #endif
 
     gNetifName[0] = '\0';
 
+#if OPENTHREAD_CONFIG_NAT64_TRANSLATOR_ENABLE
+    if (otIp4CidrFromString(OPENTHREAD_POSIX_CONFIG_NAT64_CIDR, &gNat64Cidr) != OT_ERROR_NONE)
+    {
+        gNat64Cidr.mLength = 0;
+    }
+#endif
+
 #if OPENTHREAD_CONFIG_PLATFORM_NETIF_ENABLE
-    platformNetifInit(aPlatformConfig->mInterfaceName);
+    platformNetifInit(aPlatformConfig);
 #endif
 
 #if OPENTHREAD_CONFIG_PLATFORM_UDP_ENABLE
@@ -161,11 +173,13 @@ exit:
 
 void platformSetUp(void)
 {
+    VerifyOrExit(!gDryRun);
+
 #if OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
     platformBackboneSetUp();
 #endif
 
-#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+#if OPENTHREAD_POSIX_CONFIG_INFRA_IF_ENABLE
     ot::Posix::InfraNetif::Get().SetUp();
 #endif
 
@@ -184,6 +198,9 @@ void platformSetUp(void)
 #if OPENTHREAD_CONFIG_PLATFORM_NETIF_ENABLE || OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
     SuccessOrDie(otSetStateChangedCallback(gInstance, processStateChange, gInstance));
 #endif
+
+exit:
+    return;
 }
 
 otInstance *otSysInit(otPlatformConfig *aPlatformConfig)
@@ -203,6 +220,8 @@ otInstance *otSysInit(otPlatformConfig *aPlatformConfig)
 
 void platformTearDown(void)
 {
+    VerifyOrExit(!gDryRun);
+
 #if OPENTHREAD_POSIX_CONFIG_DAEMON_ENABLE
     ot::Posix::Daemon::Get().TearDown();
 #endif
@@ -215,13 +234,16 @@ void platformTearDown(void)
     platformNetifTearDown();
 #endif
 
-#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+#if OPENTHREAD_POSIX_CONFIG_INFRA_IF_ENABLE
     ot::Posix::InfraNetif::Get().TearDown();
 #endif
 
 #if OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
     platformBackboneTearDown();
 #endif
+
+exit:
+    return;
 }
 
 void platformDeinit(void)
@@ -230,6 +252,10 @@ void platformDeinit(void)
     virtualTimeDeinit();
 #endif
     platformRadioDeinit();
+
+    // For Dry-Run option, only the radio is initialized.
+    VerifyOrExit(!gDryRun);
+
 #if OPENTHREAD_CONFIG_PLATFORM_UDP_ENABLE
     ot::Posix::Udp::Get().Deinit();
 #endif
@@ -240,13 +266,16 @@ void platformDeinit(void)
     platformTrelDeinit();
 #endif
 
-#if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
+#if OPENTHREAD_POSIX_CONFIG_INFRA_IF_ENABLE
     ot::Posix::InfraNetif::Get().Deinit();
 #endif
 
 #if OPENTHREAD_CONFIG_BACKBONE_ROUTER_ENABLE
     platformBackboneDeinit();
 #endif
+
+exit:
+    return;
 }
 
 void otSysDeinit(void)
@@ -379,7 +408,4 @@ void otSysMainloopProcess(otInstance *aInstance, const otSysMainloopContext *aMa
 #endif
 }
 
-bool IsSystemDryRun(void)
-{
-    return gDryRun;
-}
+bool IsSystemDryRun(void) { return gDryRun; }

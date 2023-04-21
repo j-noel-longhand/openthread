@@ -53,13 +53,23 @@
  * @defgroup api-net                  IPv6 Networking
  * @{
  *
- * @defgroup api-dns                  DNSv6
+ * @defgroup api-dns                  DNS
  * @defgroup api-dnssd-server         DNS-SD Server
  * @defgroup api-icmp6                ICMPv6
  * @defgroup api-ip6                  IPv6
+ * @defgroup api-nat64                NAT64
  * @defgroup api-srp                  SRP
  * @defgroup api-ping-sender          Ping Sender
+ *
+ * @defgroup api-tcp-group            TCP
+ *
+ * @{
+ *
  * @defgroup api-tcp                  TCP
+ * @defgroup api-tcp-ext              TCP Abstractions
+ *
+ * @}
+ *
  * @defgroup api-udp-group            UDP
  *
  * @{
@@ -93,11 +103,13 @@
  * @defgroup api-backbone-router      Backbone Router
  * @defgroup api-border-agent         Border Agent
  * @defgroup api-border-router        Border Router
+ * @defgroup api-border-routing       Border Routing Manager
  * @defgroup api-commissioner         Commissioner
  * @defgroup api-thread-general       General
  * @brief This module includes functions for all Thread roles.
  * @defgroup api-joiner               Joiner
  * @defgroup api-operational-dataset  Operational Dataset
+ * @brief Includes functions for the Operational Dataset API.
  * @defgroup api-thread-router        Router/Leader
  * @brief This module includes functions for Thread Routers and Leaders.
  * @defgroup api-server               Server
@@ -127,6 +139,7 @@
  * @defgroup api-history-tracker      History Tracker
  * @defgroup api-jam-detection        Jam Detection
  * @defgroup api-logging              Logging - Thread Stack
+ * @defgroup api-mesh-diag            Mesh Diagnostics
  * @defgroup api-ncp                  Network Co-Processor
  * @defgroup api-network-time         Network Time Synchronization
  * @defgroup api-random-group         Random Number Generator
@@ -155,6 +168,7 @@
  *
  * @defgroup plat-alarm               Alarm
  * @defgroup plat-crypto              Crypto - Platform
+ * @defgroup plat-dns                 DNS - Platform
  * @defgroup plat-entropy             Entropy
  * @defgroup plat-factory-diagnostics Factory Diagnostics - Platform
  * @defgroup plat-logging             Logging - Platform
@@ -168,6 +182,7 @@
  * @defgroup plat-time                Time Service
  * @defgroup plat-toolchain           Toolchain
  * @defgroup plat-trel                TREL - Platform
+ * @defgroup plat-infra-if            Infrastructure Interface
  *
  * @}
  *

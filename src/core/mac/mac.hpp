@@ -71,8 +71,9 @@ class Neighbor;
 
 namespace Mac {
 
-constexpr uint32_t kDataPollTimeout = 100; ///< Timeout for receiving Data Frame (in msec).
-constexpr uint32_t kSleepDelay      = 300; ///< Max sleep delay when frame is pending (in msec).
+constexpr uint32_t kDataPollTimeout =
+    OPENTHREAD_CONFIG_MAC_DATA_POLL_TIMEOUT; ///< Timeout for receiving Data Frame (in msec).
+constexpr uint32_t kSleepDelay = 300;        ///< Max sleep delay when frame is pending (in msec)
 
 constexpr uint16_t kScanDurationDefault = OPENTHREAD_CONFIG_MAC_SCAN_DURATION; ///< Duration per channel (in msec).
 
@@ -228,7 +229,6 @@ public:
      * This method requests transmission of a data poll (MAC Data Request) frame.
      *
      * @retval kErrorNone          Data poll transmission request is scheduled successfully.
-     * @retval kErrorAlready       MAC is busy sending earlier poll transmission request.
      * @retval kErrorInvalidState  The MAC layer is not enabled.
      *
      */
@@ -324,68 +324,6 @@ public:
     void SetSupportedChannelMask(const ChannelMask &aMask);
 
     /**
-     * This method returns the IEEE 802.15.4 Network Name.
-     *
-     * @returns The IEEE 802.15.4 Network Name.
-     *
-     */
-    const NetworkName &GetNetworkName(void) const { return mNetworkName; }
-
-    /**
-     * This method sets the IEEE 802.15.4 Network Name.
-     *
-     * @param[in]  aNameString   A pointer to a string character array. Must be null terminated.
-     *
-     * @retval kErrorNone          Successfully set the IEEE 802.15.4 Network Name.
-     * @retval kErrorInvalidArgs   Given name is too long.
-     *
-     */
-    Error SetNetworkName(const char *aNameString);
-
-    /**
-     * This method sets the IEEE 802.15.4 Network Name.
-     *
-     * @param[in]  aNameData     A name data (pointer to char buffer and length).
-     *
-     * @retval kErrorNone          Successfully set the IEEE 802.15.4 Network Name.
-     * @retval kErrorInvalidArgs   Given name is too long.
-     *
-     */
-    Error SetNetworkName(const NameData &aNameData);
-
-#if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
-    /**
-     * This method returns the Thread Domain Name.
-     *
-     * @returns The Thread Domain Name.
-     *
-     */
-    const DomainName &GetDomainName(void) const { return mDomainName; }
-
-    /**
-     * This method sets the Thread Domain Name.
-     *
-     * @param[in]  aNameString   A pointer to a string character array. Must be null terminated.
-     *
-     * @retval kErrorNone          Successfully set the Thread Domain Name.
-     * @retval kErrorInvalidArgs   Given name is too long.
-     *
-     */
-    Error SetDomainName(const char *aNameString);
-
-    /**
-     * This method sets the Thread Domain Name.
-     *
-     * @param[in]  aNameData     A name data (pointer to char buffer and length).
-     *
-     * @retval kErrorNone          Successfully set the Thread Domain Name.
-     * @retval kErrorInvalidArgs   Given name is too long.
-     *
-     */
-    Error SetDomainName(const NameData &aNameData);
-#endif // (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
-
-    /**
      * This method returns the IEEE 802.15.4 PAN ID.
      *
      * @returns The IEEE 802.15.4 PAN ID.
@@ -400,22 +338,6 @@ public:
      *
      */
     void SetPanId(PanId aPanId);
-
-    /**
-     * This method returns the IEEE 802.15.4 Extended PAN Identifier.
-     *
-     * @returns The IEEE 802.15.4 Extended PAN Identifier.
-     *
-     */
-    const ExtendedPanId &GetExtendedPanId(void) const { return mExtendedPanId; }
-
-    /**
-     * This method sets the IEEE 802.15.4 Extended PAN Identifier.
-     *
-     * @param[in]  aExtendedPanId  The IEEE 802.15.4 Extended PAN Identifier.
-     *
-     */
-    void SetExtendedPanId(const ExtendedPanId &aExtendedPanId);
 
     /**
      * This method returns the maximum number of frame retries during direct transmission.
@@ -491,7 +413,7 @@ public:
      *
      */
     void RecordFrameTransmitStatus(const TxFrame &aFrame,
-                                   const RxFrame *aAckFrame,
+                                   RxFrame       *aAckFrame,
                                    Error          aError,
                                    uint8_t        aRetryCount,
                                    bool           aWillRetx);
@@ -625,7 +547,17 @@ public:
      * @returns The noise floor value in dBm.
      *
      */
-    int8_t GetNoiseFloor(void) { return mLinks.GetNoiseFloor(); }
+    int8_t GetNoiseFloor(void) const { return mLinks.GetNoiseFloor(); }
+
+    /**
+     * This method computes the link margin for a given a received signal strength value using noise floor.
+     *
+     * @param[in] aRss The received signal strength in dBm.
+     *
+     * @returns The link margin for @p aRss in dB based on noise floor.
+     *
+     */
+    uint8_t ComputeLinkMargin(int8_t aRss) const;
 
     /**
      * This method returns the current CCA (Clear Channel Assessment) failure rate.
@@ -662,7 +594,7 @@ public:
      * @returns CSL channel.
      *
      */
-    uint8_t GetCslChannel(void) const { return mLinks.GetSubMac().GetCslChannel(); }
+    uint8_t GetCslChannel(void) const { return mCslChannel; }
 
     /**
      * This method sets the CSL channel.
@@ -673,12 +605,10 @@ public:
     void SetCslChannel(uint8_t aChannel);
 
     /**
-     * This method indicates if CSL channel has been explicitly specified by the upper layer.
-     *
-     * @returns If CSL channel has been specified.
+     * This method centralizes CSL state switching conditions evaluating, configuring SubMac accordingly.
      *
      */
-    bool IsCslChannelSpecified(void) const { return mLinks.GetSubMac().IsCslChannelSpecified(); }
+    void UpdateCsl(void);
 
     /**
      * This method gets the CSL period.
@@ -686,7 +616,15 @@ public:
      * @returns CSL period in units of 10 symbols.
      *
      */
-    uint16_t GetCslPeriod(void) const { return mLinks.GetSubMac().GetCslPeriod(); }
+    uint16_t GetCslPeriod(void) const { return mCslPeriod; }
+
+    /**
+     * This method gets the CSL period.
+     *
+     * @returns CSL period in milliseconds.
+     *
+     */
+    uint32_t GetCslPeriodMs(void) const { return mCslPeriod * kUsPerTenSymbols / 1000; }
 
     /**
      * This method sets the CSL period.
@@ -715,42 +653,33 @@ public:
     bool IsCslCapable(void) const;
 
     /**
-     * This method returns CSL parent clock accuracy, in ± ppm.
+     * This method indicates whether the device is connected to a parent which supports CSL.
      *
-     * @retval CSL parent clock accuracy, in ± ppm.
+     * @retval TRUE   If parent supports CSL.
+     * @retval FALSE  If parent does not support CSL.
      *
      */
-    uint8_t GetCslParentClockAccuracy(void) const { return mLinks.GetSubMac().GetCslParentClockAccuracy(); }
+    bool IsCslSupported(void) const;
 
     /**
-     * This method sets CSL parent clock accuracy, in ± ppm.
+     * This method returns parent CSL accuracy (clock accuracy and uncertainty).
      *
-     * @param[in] aCslParentAccuracy CSL parent clock accuracy, in ± ppm.
+     * @returns The parent CSL accuracy.
      *
      */
-    void SetCslParentClockAccuracy(uint8_t aCslParentAccuracy)
+    const CslAccuracy &GetCslParentAccuracy(void) const { return mLinks.GetSubMac().GetCslParentAccuracy(); }
+
+    /**
+     * This method sets parent CSL accuracy.
+     *
+     * @param[in] aCslAccuracy  The parent CSL accuracy.
+     *
+     */
+    void SetCslParentAccuracy(const CslAccuracy &aCslAccuracy)
     {
-        mLinks.GetSubMac().SetCslParentClockAccuracy(aCslParentAccuracy);
+        mLinks.GetSubMac().SetCslParentAccuracy(aCslAccuracy);
     }
 
-    /**
-     * This method returns CSL parent uncertainty, in ±10 us units.
-     *
-     * @retval CSL parent uncertainty, in ±10 us units.
-     *
-     */
-    uint8_t GetCslParentUncertainty(void) const { return mLinks.GetSubMac().GetCslParentUncertainty(); }
-
-    /**
-     * This method returns CSL parent uncertainty, in ±10 us units.
-     *
-     * @param[in] aCslParentUncert  CSL parent uncertainty, in ±10 us units.
-     *
-     */
-    void SetCslParentUncertainty(uint8_t aCslParentUncert)
-    {
-        mLinks.GetSubMac().SetCslParentUncertainty(aCslParentUncert);
-    }
 #endif // OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
 
 #if OPENTHREAD_CONFIG_MAC_FILTER_ENABLE && OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
@@ -777,7 +706,6 @@ public:
 #endif
 
 private:
-    static constexpr int8_t   kInvalidRssiValue  = SubMac::kInvalidRssiValue;
     static constexpr uint16_t kMaxCcaSampleCount = OPENTHREAD_CONFIG_CCA_FAILURE_RATE_AVERAGING_WINDOW;
 
     enum Operation : uint8_t
@@ -840,10 +768,7 @@ private:
     bool     IsJoinable(void) const;
     void     BeginTransmit(void);
     bool     HandleMacCommand(RxFrame &aFrame);
-
-    static void HandleTimer(Timer &aTimer);
-    void        HandleTimer(void);
-    static void HandleOperationTask(Tasklet &aTasklet);
+    void     HandleTimer(void);
 
     void  Scan(Operation aScanOperation, uint32_t aScanChannels, uint16_t aScanDuration);
     Error UpdateScanChannel(void);
@@ -852,11 +777,10 @@ private:
     Error ConvertBeaconToActiveScanResult(const RxFrame *aBeaconFrame, ActiveScanResult &aResult);
     void  PerformEnergyScan(void);
     void  ReportEnergyScanResult(int8_t aRssi);
-    Error SignalNetworkNameChange(Error aError);
 
     void LogFrameRxFailure(const RxFrame *aFrame, Error aError) const;
     void LogFrameTxFailure(const TxFrame &aFrame, Error aError, uint8_t aRetryCount, bool aWillRetx) const;
-    void LogBeacon(const char *aActionText, const BeaconPayload &aBeaconPayload) const;
+    void LogBeacon(const char *aActionText) const;
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     uint8_t GetTimeIeOffset(const Frame &aFrame);
@@ -870,10 +794,10 @@ private:
 #endif
     static const char *OperationToString(Operation aOperation);
 
-    static const otExtAddress    sMode2ExtAddress;
-    static const otExtendedPanId sExtendedPanidInit;
-    static const char            sNetworkNameInit[];
-    static const char            sDomainNameInit[];
+    using OperationTask = TaskletIn<Mac, &Mac::PerformNextOperation>;
+    using MacTimer      = TimerMilliIn<Mac, &Mac::HandleTimer>;
+
+    static const otExtAddress sMode2ExtAddress;
 
     bool mEnabled : 1;
     bool mShouldTxPollBeforeData : 1;
@@ -885,20 +809,15 @@ private:
     bool mShouldDelaySleep : 1;
     bool mDelayingSleep : 1;
 #endif
-    Operation     mOperation;
-    uint16_t      mPendingOperations;
-    uint8_t       mBeaconSequence;
-    uint8_t       mDataSequence;
-    uint8_t       mBroadcastTransmitCount;
-    PanId         mPanId;
-    uint8_t       mPanChannel;
-    uint8_t       mRadioChannel;
-    ChannelMask   mSupportedChannelMask;
-    ExtendedPanId mExtendedPanId;
-    NetworkName   mNetworkName;
-#if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
-    DomainName mDomainName;
-#endif
+    Operation   mOperation;
+    uint16_t    mPendingOperations;
+    uint8_t     mBeaconSequence;
+    uint8_t     mDataSequence;
+    uint8_t     mBroadcastTransmitCount;
+    PanId       mPanId;
+    uint8_t     mPanChannel;
+    uint8_t     mRadioChannel;
+    ChannelMask mSupportedChannelMask;
     uint8_t     mScanChannel;
     uint16_t    mScanDuration;
     ChannelMask mScanChannelMask;
@@ -908,6 +827,11 @@ private:
 #if OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     TimeMilli mCslTxFireTime;
 #endif
+#endif
+#if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
+    // When Mac::mCslChannel is 0, it indicates that CSL channel has not been specified by the upper layer.
+    uint8_t  mCslChannel;
+    uint16_t mCslPeriod;
 #endif
 
     union
@@ -919,8 +843,8 @@ private:
     void *mScanHandlerContext;
 
     Links              mLinks;
-    Tasklet            mOperationTask;
-    TimerMilli         mTimer;
+    OperationTask      mOperationTask;
+    MacTimer           mTimer;
     otMacCounters      mCounters;
     uint32_t           mKeyIdMode2FrameCounter;
     SuccessRateTracker mCcaSuccessRateTracker;

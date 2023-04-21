@@ -64,11 +64,6 @@ exit:
     return error;
 }
 
-Error Local::RemoveOnMeshPrefix(const Ip6::Prefix &aPrefix)
-{
-    return RemovePrefix(aPrefix, NetworkDataTlv::kTypeBorderRouter);
-}
-
 bool Local::ContainsOnMeshPrefix(const Ip6::Prefix &aPrefix) const
 {
     const PrefixTlv *tlv;
@@ -95,18 +90,13 @@ exit:
     return error;
 }
 
-Error Local::RemoveHasRoutePrefix(const Ip6::Prefix &aPrefix)
-{
-    return RemovePrefix(aPrefix, NetworkDataTlv::kTypeHasRoute);
-}
-
 Error Local::AddPrefix(const Ip6::Prefix &aPrefix, NetworkDataTlv::Type aSubTlvType, uint16_t aFlags, bool aStable)
 {
     Error      error = kErrorNone;
     uint8_t    subTlvLength;
     PrefixTlv *prefixTlv;
 
-    IgnoreError(RemovePrefix(aPrefix, aSubTlvType));
+    IgnoreError(RemovePrefix(aPrefix));
 
     subTlvLength = (aSubTlvType == NetworkDataTlv::kTypeBorderRouter)
                        ? sizeof(BorderRouterTlv) + sizeof(BorderRouterEntry)
@@ -147,13 +137,12 @@ exit:
     return error;
 }
 
-Error Local::RemovePrefix(const Ip6::Prefix &aPrefix, NetworkDataTlv::Type aSubTlvType)
+Error Local::RemovePrefix(const Ip6::Prefix &aPrefix)
 {
     Error      error = kErrorNone;
     PrefixTlv *tlv;
 
     VerifyOrExit((tlv = FindPrefix(aPrefix)) != nullptr, error = kErrorNotFound);
-    VerifyOrExit(tlv->FindSubTlv(aSubTlvType) != nullptr, error = kErrorNotFound);
     RemoveTlv(tlv);
 
 exit:
@@ -179,15 +168,8 @@ void Local::UpdateRloc(PrefixTlv &aPrefixTlv)
 
         default:
             OT_ASSERT(false);
-            OT_UNREACHABLE_CODE(break);
         }
     }
-}
-
-bool Local::IsConsistent(void) const
-{
-    return Get<Leader>().ContainsEntriesFrom(*this, Get<Mle::MleRouter>().GetRloc16()) &&
-           ContainsEntriesFrom(Get<Leader>(), Get<Mle::MleRouter>().GetRloc16());
 }
 
 #endif // OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
@@ -196,11 +178,11 @@ bool Local::IsConsistent(void) const
 Error Local::AddService(uint32_t           aEnterpriseNumber,
                         const ServiceData &aServiceData,
                         bool               aServerStable,
-                        const ServerData & aServerData)
+                        const ServerData  &aServerData)
 {
     Error       error = kErrorNone;
     ServiceTlv *serviceTlv;
-    ServerTlv * serverTlv;
+    ServerTlv  *serverTlv;
     uint16_t    serviceTlvSize = ServiceTlv::CalculateSize(aEnterpriseNumber, aServiceData.GetLength()) +
                               sizeof(ServerTlv) + aServerData.GetLength();
 
@@ -260,7 +242,6 @@ void Local::UpdateRloc(ServiceTlv &aService)
 
         default:
             OT_ASSERT(false);
-            OT_UNREACHABLE_CODE(break);
         }
     }
 }
@@ -288,40 +269,8 @@ void Local::UpdateRloc(void)
 
         default:
             OT_ASSERT(false);
-            OT_UNREACHABLE_CODE(break);
         }
     }
-}
-
-Error Local::UpdateInconsistentServerData(Coap::ResponseHandler aHandler, void *aContext)
-{
-    Error    error = kErrorNone;
-    uint16_t rloc  = Get<Mle::MleRouter>().GetRloc16();
-
-#if OPENTHREAD_FTD
-    // Don't send this Server Data Notification if the device is going to upgrade to Router
-    if (Get<Mle::MleRouter>().IsExpectedToBecomeRouterSoon())
-    {
-        ExitNow(error = kErrorInvalidState);
-    }
-#endif
-
-    UpdateRloc();
-
-#if OPENTHREAD_CONFIG_BORDER_ROUTER_ENABLE
-    VerifyOrExit(!IsConsistent(), error = kErrorNotFound);
-#endif
-
-    if (mOldRloc == rloc)
-    {
-        mOldRloc = Mac::kShortAddrInvalid;
-    }
-
-    SuccessOrExit(error = SendServerDataNotification(mOldRloc, /* aAppendNetDataTlv */ true, aHandler, aContext));
-    mOldRloc = rloc;
-
-exit:
-    return error;
 }
 
 } // namespace NetworkData

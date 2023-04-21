@@ -65,8 +65,8 @@ namespace ot {
 namespace Posix {
 
 SpiInterface::SpiInterface(SpinelInterface::ReceiveFrameCallback aCallback,
-                           void *                                aCallbackContext,
-                           SpinelInterface::RxFrameBuffer &      aFrameBuffer)
+                           void                                 *aCallbackContext,
+                           SpinelInterface::RxFrameBuffer       &aFrameBuffer)
     : mReceiveFrameCallback(aCallback)
     , mReceiveFrameContext(aCallbackContext)
     , mRxFrameBuffer(aFrameBuffer)
@@ -74,15 +74,8 @@ SpiInterface::SpiInterface(SpinelInterface::ReceiveFrameCallback aCallback,
     , mResetGpioValueFd(-1)
     , mIntGpioValueFd(-1)
     , mSlaveResetCount(0)
-    , mSpiFrameCount(0)
-    , mSpiValidFrameCount(0)
-    , mSpiGarbageFrameCount(0)
     , mSpiDuplexFrameCount(0)
     , mSpiUnresponsiveFrameCount(0)
-    , mSpiRxFrameCount(0)
-    , mSpiRxFrameByteCount(0)
-    , mSpiTxFrameCount(0)
-    , mSpiTxFrameByteCount(0)
     , mSpiTxIsReady(false)
     , mSpiTxRefusedCount(0)
     , mSpiTxPayloadSize(0)
@@ -92,18 +85,30 @@ SpiInterface::SpiInterface(SpinelInterface::ReceiveFrameCallback aCallback,
 {
 }
 
-void SpiInterface::OnRcpReset(void)
+void SpiInterface::ResetStates(void)
 {
-    mSpiValidFrameCount   = 0;
     mSpiTxIsReady         = false;
     mSpiTxRefusedCount    = 0;
     mSpiTxPayloadSize     = 0;
     mDidPrintRateLimitLog = false;
     mSpiSlaveDataLen      = 0;
     memset(mSpiTxFrameBuffer, 0, sizeof(mSpiTxFrameBuffer));
+    memset(&mInterfaceMetrics, 0, sizeof(mInterfaceMetrics));
+    mInterfaceMetrics.mRcpInterfaceType = OT_POSIX_RCP_BUS_SPI;
+}
 
+otError SpiInterface::HardwareReset(void)
+{
+    ResetStates();
     TriggerReset();
+
+    // If the `INT` pin is set to low during the restart of the RCP chip, which triggers continuous invalid SPI
+    // transactions by the host, it will cause the function `PushPullSpi()` to output lots of invalid warn log
+    // messages. Adding the delay here is used to wait for the RCP chip starts up to avoid outputing invalid
+    // log messages.
     usleep(static_cast<useconds_t>(mSpiResetDelay) * kUsecPerMsec);
+
+    return OT_ERROR_NONE;
 }
 
 otError SpiInterface::Init(const Url::Url &aRadioUrl)
@@ -188,19 +193,10 @@ otError SpiInterface::Init(const Url::Url &aRadioUrl)
     InitResetPin(spiGpioResetDevice, spiGpioResetLine);
     InitSpiDev(aRadioUrl.GetPath(), spiMode, spiSpeed);
 
-    // Reset RCP chip.
-    TriggerReset();
-
-    // Waiting for the RCP chip starts up.
-    usleep(static_cast<useconds_t>(spiResetDelay) * kUsecPerMsec);
-
     return OT_ERROR_NONE;
 }
 
-SpiInterface::~SpiInterface(void)
-{
-    Deinit();
-}
+SpiInterface::~SpiInterface(void) { Deinit(); }
 
 void SpiInterface::Deinit(void)
 {
@@ -349,7 +345,7 @@ void SpiInterface::TriggerReset(void)
 
 uint8_t *SpiInterface::GetRealRxFrameStart(uint8_t *aSpiRxFrameBuffer, uint8_t aAlignAllowance, uint16_t &aSkipLength)
 {
-    uint8_t *      start = aSpiRxFrameBuffer;
+    uint8_t       *start = aSpiRxFrameBuffer;
     const uint8_t *end   = aSpiRxFrameBuffer + aAlignAllowance;
 
     for (; start != end && start[0] == 0xff; start++)
@@ -402,7 +398,7 @@ otError SpiInterface::DoSpiTransfer(uint8_t *aSpiRxFrameBuffer, uint32_t aTransf
         otDumpDebgPlat("SPI-TX", mSpiTxFrameBuffer, static_cast<uint16_t>(transfer[1].len));
         otDumpDebgPlat("SPI-RX", aSpiRxFrameBuffer, static_cast<uint16_t>(transfer[1].len));
 
-        mSpiFrameCount++;
+        mInterfaceMetrics.mTransferredFrameCount++;
     }
 
     return (ret < 0) ? OT_ERROR_FAILED : OT_ERROR_NONE;
@@ -414,14 +410,14 @@ otError SpiInterface::PushPullSpi(void)
     uint16_t      spiTransferBytes    = 0;
     uint8_t       successfulExchanges = 0;
     bool          discardRxFrame      = true;
-    uint8_t *     spiRxFrameBuffer;
-    uint8_t *     spiRxFrame;
+    uint8_t      *spiRxFrameBuffer;
+    uint8_t      *spiRxFrame;
     uint8_t       slaveHeader;
     uint16_t      slaveAcceptLen;
     Ncp::SpiFrame txFrame(mSpiTxFrameBuffer);
     uint16_t      skipAlignAllowanceLength;
 
-    if (mSpiValidFrameCount == 0)
+    if (mInterfaceMetrics.mTransferredValidFrameCount == 0)
     {
         // Set the reset flag to indicate to our slave that we are coming up from scratch.
         txFrame.SetHeaderFlagByte(true);
@@ -525,7 +521,7 @@ otError SpiInterface::PushPullSpi(void)
             else
             {
                 // Header is full of garbage
-                mSpiGarbageFrameCount++;
+                mInterfaceMetrics.mTransferredGarbageFrameCount++;
 
                 otLogWarnPlat("Garbage in header : %02X %02X %02X %02X %02X", spiRxFrame[0], spiRxFrame[1],
                               spiRxFrame[2], spiRxFrame[3], spiRxFrame[4]);
@@ -542,7 +538,7 @@ otError SpiInterface::PushPullSpi(void)
 
         if (!rxFrame.IsValid() || (slaveAcceptLen > kMaxFrameSize) || (mSpiSlaveDataLen > kMaxFrameSize))
         {
-            mSpiGarbageFrameCount++;
+            mInterfaceMetrics.mTransferredGarbageFrameCount++;
             mSpiTxRefusedCount++;
             mSpiSlaveDataLen = 0;
 
@@ -554,7 +550,7 @@ otError SpiInterface::PushPullSpi(void)
             ExitNow();
         }
 
-        mSpiValidFrameCount++;
+        mInterfaceMetrics.mTransferredValidFrameCount++;
 
         if (rxFrame.IsResetFlagSet())
         {
@@ -567,9 +563,9 @@ otError SpiInterface::PushPullSpi(void)
         // Handle received packet, if any.
         if ((mSpiSlaveDataLen != 0) && (mSpiSlaveDataLen <= txFrame.GetHeaderAcceptLen()))
         {
-            mSpiRxFrameByteCount += mSpiSlaveDataLen;
+            mInterfaceMetrics.mRxFrameByteCount += mSpiSlaveDataLen;
             mSpiSlaveDataLen = 0;
-            mSpiRxFrameCount++;
+            mInterfaceMetrics.mRxFrameCount++;
             successfulExchanges++;
 
             // Set the skip length to skip align bytes and SPI frame header.
@@ -594,8 +590,8 @@ otError SpiInterface::PushPullSpi(void)
             // that uplayer can pull another packet for us to send.
             successfulExchanges++;
 
-            mSpiTxFrameCount++;
-            mSpiTxFrameByteCount += mSpiTxPayloadSize;
+            mInterfaceMetrics.mTxFrameCount++;
+            mInterfaceMetrics.mTxFrameByteCount += mSpiTxPayloadSize;
 
             mSpiTxIsReady      = false;
             mSpiTxPayloadSize  = 0;
@@ -731,10 +727,7 @@ void SpiInterface::UpdateFdSet(fd_set &aReadFdSet, fd_set &aWriteFdSet, int &aMa
     }
 }
 
-void SpiInterface::Process(const RadioProcessContext &aContext)
-{
-    Process(aContext.mReadFdSet, aContext.mWriteFdSet);
-}
+void SpiInterface::Process(const RadioProcessContext &aContext) { Process(aContext.mReadFdSet, aContext.mWriteFdSet); }
 
 void SpiInterface::Process(const fd_set *aReadFdSet, const fd_set *aWriteFdSet)
 {
@@ -812,6 +805,12 @@ otError SpiInterface::SendFrame(const uint8_t *aFrame, uint16_t aLength)
     otError error = OT_ERROR_NONE;
 
     VerifyOrExit(aLength < (kMaxFrameSize - kSpiFrameHeaderSize), error = OT_ERROR_NO_BUFS);
+
+    if (ot::Spinel::SpinelInterface::IsSpinelResetCommand(aFrame, aLength))
+    {
+        ResetStates();
+    }
+
     VerifyOrExit(!mSpiTxIsReady, error = OT_ERROR_BUSY);
 
     memcpy(&mSpiTxFrameBuffer[kSpiFrameHeaderSize], aFrame, aLength);
@@ -833,16 +832,16 @@ void SpiInterface::LogError(const char *aString)
 
 void SpiInterface::LogStats(void)
 {
-    otLogInfoPlat("INFO: mSlaveResetCount=%" PRIu64, mSlaveResetCount);
-    otLogInfoPlat("INFO: mSpiFrameCount=%" PRIu64, mSpiFrameCount);
-    otLogInfoPlat("INFO: mSpiValidFrameCount=%" PRIu64, mSpiValidFrameCount);
-    otLogInfoPlat("INFO: mSpiDuplexFrameCount=%" PRIu64, mSpiDuplexFrameCount);
-    otLogInfoPlat("INFO: mSpiUnresponsiveFrameCount=%" PRIu64, mSpiUnresponsiveFrameCount);
-    otLogInfoPlat("INFO: mSpiGarbageFrameCount=%" PRIu64, mSpiGarbageFrameCount);
-    otLogInfoPlat("INFO: mSpiRxFrameCount=%" PRIu64, mSpiRxFrameCount);
-    otLogInfoPlat("INFO: mSpiRxFrameByteCount=%" PRIu64, mSpiRxFrameByteCount);
-    otLogInfoPlat("INFO: mSpiTxFrameCount=%" PRIu64, mSpiTxFrameCount);
-    otLogInfoPlat("INFO: mSpiTxFrameByteCount=%" PRIu64, mSpiTxFrameByteCount);
+    otLogInfoPlat("INFO: SlaveResetCount=%" PRIu64, mSlaveResetCount);
+    otLogInfoPlat("INFO: SpiDuplexFrameCount=%" PRIu64, mSpiDuplexFrameCount);
+    otLogInfoPlat("INFO: SpiUnresponsiveFrameCount=%" PRIu64, mSpiUnresponsiveFrameCount);
+    otLogInfoPlat("INFO: TransferredFrameCount=%" PRIu64, mInterfaceMetrics.mTransferredFrameCount);
+    otLogInfoPlat("INFO: TransferredValidFrameCount=%" PRIu64, mInterfaceMetrics.mTransferredValidFrameCount);
+    otLogInfoPlat("INFO: TransferredGarbageFrameCount=%" PRIu64, mInterfaceMetrics.mTransferredGarbageFrameCount);
+    otLogInfoPlat("INFO: RxFrameCount=%" PRIu64, mInterfaceMetrics.mRxFrameCount);
+    otLogInfoPlat("INFO: RxFrameByteCount=%" PRIu64, mInterfaceMetrics.mRxFrameByteCount);
+    otLogInfoPlat("INFO: TxFrameCount=%" PRIu64, mInterfaceMetrics.mTxFrameCount);
+    otLogInfoPlat("INFO: TxFrameByteCount=%" PRIu64, mInterfaceMetrics.mTxFrameByteCount);
 }
 } // namespace Posix
 } // namespace ot

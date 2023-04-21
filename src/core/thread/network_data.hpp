@@ -267,6 +267,18 @@ public:
     Error GetNextService(Iterator &aIterator, uint16_t aRloc16, ServiceConfig &aConfig) const;
 
     /**
+     * This method gets the next 6LoWPAN Context ID info in the Thread Network Data.
+     *
+     * @param[in,out]  aIterator     A reference to the Network Data iterator.
+     * @param[out]     aContextInfo  A reference to where the retrieved 6LoWPAN Context ID information will be placed.
+     *
+     * @retval kErrorNone      Successfully found the next 6LoWPAN Context ID info.
+     * @retval kErrorNotFound  No subsequent 6LoWPAN Context info exists in the partition's Network Data.
+     *
+     */
+    Error GetNextLowpanContextInfo(Iterator &aIterator, LowpanContextInfo &aContextInfo) const;
+
+    /**
      * This method indicates whether or not the Thread Network Data contains a given on mesh prefix entry.
      *
      * @param[in]  aPrefix   The on mesh prefix config to check.
@@ -323,6 +335,67 @@ public:
      *
      */
     Error GetNextServer(Iterator &aIterator, uint16_t &aRloc16) const;
+
+    /**
+     * This method finds and returns the list of RLOCs of border routers providing external IP connectivity.
+     *
+     * A border router is considered to provide external IP connectivity if it has added at least one external route
+     * entry, or an on-mesh prefix with default-route and on-mesh flags set.
+     *
+     * This method should be used when the RLOC16s are present in the Network Data (when the Network Data contains the
+     * full set and not the stable subset).
+     *
+     * @param[in]      aRoleFilter   Indicates which devices to include (any role, router role only, or child only).
+     * @param[out]     aRlocs        Array to output the list of RLOCs.
+     * @param[in,out]  aRlocsLength  On entry, @p aRlocs array length (max number of elements).
+     *                               On exit, number RLOC16 entries added in @p aRlocs.
+     *
+     * @retval kErrorNone     Successfully found all RLOC16s and updated @p aRlocs and @p aRlocsLength.
+     * @retval kErrorNoBufs   Ran out of space in @p aRlocs array. @p aRlocs and @p aRlocsLength are still updated up
+     *                        to the maximum array length.
+     *
+     */
+    Error FindBorderRouters(RoleFilter aRoleFilter, uint16_t aRlocs[], uint8_t &aRlocsLength) const;
+
+    /**
+     * This method counts the number of border routers providing external IP connectivity.
+     *
+     * A border router is considered to provide external IP connectivity if at least one of the below conditions hold
+     *
+     * - It has added at least one external route entry.
+     * - It has added at least one prefix entry with default-route and on-mesh flags set.
+     * - It has added at least one domain prefix (domain and on-mesh flags set).
+     *
+     * This method should be used when the RLOC16s are present in the Network Data (when the Network Data contains the
+     * full set and not the stable subset).
+     *
+     * @param[in] aRoleFilter   Indicates which RLOCs to include (any role, router only, or child only).
+     *
+     * @returns The number of border routers in Thread Network Data matching @p aRoleFilter.
+     *
+     */
+    uint8_t CountBorderRouters(RoleFilter aRoleFilter) const;
+
+    /**
+     * This method indicates whether the network data contains a border providing external IP connectivity with a given
+     * RLOC16.
+     *
+     * A border router is considered to provide external IP connectivity if at least one of the below conditions hold
+     *
+     * - It has added at least one external route entry.
+     * - It has added at least one prefix entry with default-route and on-mesh flags set.
+     * - It has added at least one domain prefix (domain and on-mesh flags set).
+     *
+     * This method should be used when the RLOC16s are present in the Network Data (when the Network Data contains the
+     * full set and not the stable subset).
+     *
+     * @param[in] aRloc16   The RLOC16 to check.
+     *
+     * @returns TRUE  If the network data contains a border router with @p aRloc16 providing IP connectivity.
+     * @returns FALSE If the network data does not contain a border router with @p aRloc16 providing IP connectivity.
+     *
+     */
+    bool ContainsBorderRouterWithRloc(uint16_t aRloc16) const;
 
 protected:
     /**
@@ -404,7 +477,7 @@ protected:
      * @returns A pointer to the next matching Service TLV if one is found or `nullptr` if it cannot be found.
      *
      */
-    const ServiceTlv *FindNextService(const ServiceTlv * aPrevServiceTlv,
+    const ServiceTlv *FindNextService(const ServiceTlv  *aPrevServiceTlv,
                                       uint32_t           aEnterpriseNumber,
                                       const ServiceData &aServiceData,
                                       ServiceMatchMode   aServiceMatchMode) const;
@@ -423,26 +496,9 @@ protected:
      * @returns A pointer to the next matching Thread Service TLV if one is found or `nullptr` if it cannot be found.
      *
      */
-    const ServiceTlv *FindNextThreadService(const ServiceTlv * aPrevServiceTlv,
+    const ServiceTlv *FindNextThreadService(const ServiceTlv  *aPrevServiceTlv,
                                             const ServiceData &aServiceData,
                                             ServiceMatchMode   aServiceMatchMode) const;
-
-    /**
-     * This method sends a Server Data Notification message to the Leader.
-     *
-     * @param[in]  aRloc16            The old RLOC16 value that was previously registered.
-     * @param[in]  aAppendNetDataTlv  Indicates whether or not to append Thread Network Data TLV to the message.
-     * @param[in]  aHandler           A function pointer that is called when the transaction ends.
-     * @param[in]  aContext           A pointer to arbitrary context information.
-     *
-     * @retval kErrorNone     Successfully enqueued the notification message.
-     * @retval kErrorNoBufs   Insufficient message buffers to generate the notification message.
-     *
-     */
-    Error SendServerDataNotification(uint16_t              aRloc16,
-                                     bool                  aAppendNetDataTlv,
-                                     Coap::ResponseHandler aHandler,
-                                     void *                aContext) const;
 
 private:
     class NetworkDataIterator
@@ -471,7 +527,7 @@ private:
                                                             GetSubTlvOffset());
         }
 
-        void AdvaceSubTlv(const NetworkDataTlv *aSubTlvs)
+        void AdvanceSubTlv(const NetworkDataTlv *aSubTlvs)
         {
             SaveSubTlvOffset(GetSubTlv(aSubTlvs)->GetNext(), aSubTlvs);
             SetEntryIndex(0);
@@ -510,14 +566,15 @@ private:
 
     struct Config
     {
-        OnMeshPrefixConfig * mOnMeshPrefix;
+        OnMeshPrefixConfig  *mOnMeshPrefix;
         ExternalRouteConfig *mExternalRoute;
-        ServiceConfig *      mService;
+        ServiceConfig       *mService;
+        LowpanContextInfo   *mLowpanContext;
     };
 
     Error Iterate(Iterator &aIterator, uint16_t aRloc16, Config &aConfig) const;
 
-    static bool MatchService(const ServiceTlv & aServiceTlv,
+    static bool MatchService(const ServiceTlv  &aServiceTlv,
                              uint32_t           aEnterpriseNumber,
                              const ServiceData &aServiceData,
                              ServiceMatchMode   aServiceMatchMode);

@@ -174,25 +174,6 @@ public:
      */
     struct Info
     {
-        /**
-         * This method indicates whether or not the sequence number from the current `Info` is ahead of (more recent
-         * than) the sequence number from another `Info`.
-         *
-         * The sequence numbers comparison follows the Serial Number Arithmetic logic from RFC-1982. It is semantically
-         * equivalent to `GetSequenceNumber() > aOther.GetSequenceNumber()` while handling roll-over of the `uint8_t`
-         * values.
-         *
-         * @param[in] aOther   The other `Info` to compare with.
-         *
-         * @retval TRUE  The `Info` is ahead of @p aOther.
-         * @retval FALSE The `Info` is not ahead of @p aOther.
-         *
-         */
-        bool IsSequenceNumberAheadOf(const Info &aOther) const
-        {
-            return SerialNumber::IsGreater(mSequenceNumber, aOther.mSequenceNumber);
-        }
-
         Ip6::Address mAnycastAddress; ///< The anycast address associated with the DNS/SRP servers.
         uint8_t      mSequenceNumber; ///< Sequence number used to notify SRP client if they need to re-register.
     };
@@ -277,6 +258,7 @@ public:
     {
         Ip6::SockAddr mSockAddr; ///< The socket address (IPv6 address and port) of the DNS/SRP server.
         Origin        mOrigin;   ///< The origin of the socket address (whether from service or server data).
+        uint16_t      mRloc16;   ///< The BR RLOC16 adding the entry (only used when `mOrigin == kFromServerData`).
     };
 
     /**
@@ -423,7 +405,7 @@ public:
 
     private:
         const ServiceTlv *mServiceTlv;
-        const ServerTlv * mServerSubTlv;
+        const ServerTlv  *mServerSubTlv;
     };
 
     /**
@@ -441,7 +423,7 @@ public:
     /**
      * This method adds a Thread Service entry to the local Thread Network Data.
      *
-     * This version of `Add<SeviceType>()` is intended for use with a `ServiceType` that has a constant service data
+     * This version of `Add<ServiceType>()` is intended for use with a `ServiceType` that has a constant service data
      * format with a non-empty and potentially non-const server data format (provided as input parameter).
      *
      * The template type `ServiceType` has the following requirements:
@@ -468,7 +450,7 @@ public:
     /**
      * This method adds a Thread Service entry to the local Thread Network Data.
      *
-     * This version of `Add<SeviceType>()` is intended for use with a `ServiceType` that has a non-const service data
+     * This version of `Add<ServiceType>()` is intended for use with a `ServiceType` that has a non-const service data
      * format (provided as input parameter) with an empty server data.
      *
      * The template type `ServiceType` has the following requirements:
@@ -513,8 +495,8 @@ public:
     /**
      * This method removes a Thread Service entry from the local Thread Network Data.
      *
-     * This version of `Remove<SeviceType>()` is intended for use with a `ServiceType` that has a non-const service data
-     * format (provided as input parameter).
+     * This version of `Remove<ServiceType>()` is intended for use with a `ServiceType` that has a non-const service
+     * data format (provided as input parameter).
      *
      * The template type `ServiceType` has the following requirements:
      *   - It MUST define nested type `ServiceType::ServiceData` representing the service data (and its format).
@@ -562,7 +544,7 @@ public:
      * @param[out]  aConfig      The Primary Backbone Router configuration.
      *
      */
-    void GetBackboneRouterPrimary(ot::BackboneRouter::BackboneRouterConfig &aConfig) const;
+    void GetBackboneRouterPrimary(ot::BackboneRouter::Config &aConfig) const;
 #endif
 
     /**
@@ -623,13 +605,13 @@ private:
     Error GetServiceId(const void *aServiceData,
                        uint8_t     aServiceDataLength,
                        bool        aServerStable,
-                       uint8_t &   aServiceId) const;
+                       uint8_t    &aServiceId) const;
     Error IterateToNextServer(Iterator &aIterator) const;
 
 #if (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)
-    bool IsBackboneRouterPreferredTo(const ServerTlv &                 aServerTlv,
+    bool IsBackboneRouterPreferredTo(const ServerTlv                  &aServerTlv,
                                      const BackboneRouter::ServerData &aServerData,
-                                     const ServerTlv &                 aOtherServerTlv,
+                                     const ServerTlv                  &aOtherServerTlv,
                                      const BackboneRouter::ServerData &aOtherServerData) const;
 #endif
 };

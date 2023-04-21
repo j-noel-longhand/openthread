@@ -52,7 +52,7 @@ extern "C" {
  * @{
  *
  */
-#define OT_US_PER_TEN_SYMBOLS 160 ///< The microseconds per 10 symbols.
+#define OT_US_PER_TEN_SYMBOLS OT_RADIO_TEN_SYMBOLS_TIME ///< Time for 10 symbols in units of microseconds
 
 /**
  * This structure represents link-specific information for messages received from the Thread radio.
@@ -379,18 +379,22 @@ typedef struct otMacCounters
  */
 typedef struct otActiveScanResult
 {
-    otExtAddress    mExtAddress;     ///< IEEE 802.15.4 Extended Address
-    otNetworkName   mNetworkName;    ///< Thread Network Name
-    otExtendedPanId mExtendedPanId;  ///< Thread Extended PAN ID
-    otSteeringData  mSteeringData;   ///< Steering Data
-    uint16_t        mPanId;          ///< IEEE 802.15.4 PAN ID
-    uint16_t        mJoinerUdpPort;  ///< Joiner UDP Port
-    uint8_t         mChannel;        ///< IEEE 802.15.4 Channel
-    int8_t          mRssi;           ///< RSSI (dBm)
-    uint8_t         mLqi;            ///< LQI
-    unsigned int    mVersion : 4;    ///< Version
-    bool            mIsNative : 1;   ///< Native Commissioner flag
-    bool            mIsJoinable : 1; ///< Joining Permitted flag
+    otExtAddress    mExtAddress;    ///< IEEE 802.15.4 Extended Address
+    otNetworkName   mNetworkName;   ///< Thread Network Name
+    otExtendedPanId mExtendedPanId; ///< Thread Extended PAN ID
+    otSteeringData  mSteeringData;  ///< Steering Data
+    uint16_t        mPanId;         ///< IEEE 802.15.4 PAN ID
+    uint16_t        mJoinerUdpPort; ///< Joiner UDP Port
+    uint8_t         mChannel;       ///< IEEE 802.15.4 Channel
+    int8_t          mRssi;          ///< RSSI (dBm)
+    uint8_t         mLqi;           ///< LQI
+    unsigned int    mVersion : 4;   ///< Version
+    bool            mIsNative : 1;  ///< Native Commissioner flag
+    bool            mDiscover : 1;  ///< Result from MLE Discovery
+
+    // Applicable/Required only when beacon payload parsing feature
+    // (`OPENTHREAD_CONFIG_MAC_BEACON_PAYLOAD_PARSING_ENABLE`) is enabled.
+    bool mIsJoinable : 1; ///< Joining Permitted flag
 } otActiveScanResult;
 
 /**
@@ -426,11 +430,11 @@ typedef void (*otHandleActiveScanResult)(otActiveScanResult *aResult, void *aCon
  * @retval OT_ERROR_BUSY  Already performing an Active Scan.
  *
  */
-otError otLinkActiveScan(otInstance *             aInstance,
+otError otLinkActiveScan(otInstance              *aInstance,
                          uint32_t                 aScanChannels,
                          uint16_t                 aScanDuration,
                          otHandleActiveScanResult aCallback,
-                         void *                   aCallbackContext);
+                         void                    *aCallbackContext);
 
 /**
  * This function indicates whether or not an IEEE 802.15.4 Active Scan is currently in progress.
@@ -464,11 +468,11 @@ typedef void (*otHandleEnergyScanResult)(otEnergyScanResult *aResult, void *aCon
  * @retval OT_ERROR_BUSY  Could not start the energy scan.
  *
  */
-otError otLinkEnergyScan(otInstance *             aInstance,
+otError otLinkEnergyScan(otInstance              *aInstance,
                          uint32_t                 aScanChannels,
                          uint16_t                 aScanDuration,
                          otHandleEnergyScanResult aCallback,
-                         void *                   aCallbackContext);
+                         void                    *aCallbackContext);
 
 /**
  * This function indicates whether or not an IEEE 802.15.4 Energy Scan is currently in progress.
@@ -486,7 +490,6 @@ bool otLinkIsEnergyScanInProgress(otInstance *aInstance);
  * @param[in] aInstance  A pointer to an OpenThread instance.
  *
  * @retval OT_ERROR_NONE           Successfully enqueued an IEEE 802.15.4 Data Request message.
- * @retval OT_ERROR_ALREADY        An IEEE 802.15.4 Data Request message is already enqueued.
  * @retval OT_ERROR_INVALID_STATE  Device is not in rx-off-when-idle mode.
  * @retval OT_ERROR_NO_BUFS        Insufficient message buffers available.
  *
@@ -562,7 +565,7 @@ uint32_t otLinkGetSupportedChannelMask(otInstance *aInstance);
 otError otLinkSetSupportedChannelMask(otInstance *aInstance, uint32_t aChannelMask);
 
 /**
- * Get the IEEE 802.15.4 Extended Address.
+ * Gets the IEEE 802.15.4 Extended Address.
  *
  * @param[in]  aInstance A pointer to an OpenThread instance.
  *
@@ -572,9 +575,9 @@ otError otLinkSetSupportedChannelMask(otInstance *aInstance, uint32_t aChannelMa
 const otExtAddress *otLinkGetExtendedAddress(otInstance *aInstance);
 
 /**
- * This function sets the IEEE 802.15.4 Extended Address.
+ * Sets the IEEE 802.15.4 Extended Address.
  *
- * This function succeeds only when Thread protocols are disabled.
+ * @note Only succeeds when Thread protocols are disabled.
  *
  * @param[in]  aInstance    A pointer to an OpenThread instance.
  * @param[in]  aExtAddress  A pointer to the IEEE 802.15.4 Extended Address.
@@ -962,7 +965,7 @@ void otLinkResetTxRetrySuccessHistogram(otInstance *aInstance);
 const otMacCounters *otLinkGetCounters(otInstance *aInstance);
 
 /**
- * Reset the MAC layer counters.
+ * Resets the MAC layer counters.
  *
  * @param[in]  aInstance A pointer to an OpenThread instance.
  *
@@ -1031,7 +1034,7 @@ otError otLinkSetPromiscuous(otInstance *aInstance, bool aPromiscuous);
 uint8_t otLinkCslGetChannel(otInstance *aInstance);
 
 /**
- * This function sets the CSL channel.
+ * Sets the CSL channel.
  *
  * @param[in]  aInstance      A pointer to an OpenThread instance.
  * @param[in]  aChannel       The CSL sample channel. Channel value should be `0` (Set CSL Channel unspecified) or
@@ -1054,7 +1057,7 @@ otError otLinkCslSetChannel(otInstance *aInstance, uint8_t aChannel);
 uint16_t otLinkCslGetPeriod(otInstance *aInstance);
 
 /**
- * This function sets the CSL period.
+ * Sets the CSL period in units of 10 symbols. Disable CSL by setting this parameter to `0`.
  *
  * @param[in]  aInstance      A pointer to an OpenThread instance.
  * @param[in]  aPeriod        The CSL period in units of 10 symbols.
@@ -1076,7 +1079,7 @@ otError otLinkCslSetPeriod(otInstance *aInstance, uint16_t aPeriod);
 uint32_t otLinkCslGetTimeout(otInstance *aInstance);
 
 /**
- * This function sets the CSL timeout.
+ * Sets the CSL timeout in seconds.
  *
  * @param[in]  aInstance      A pointer to an OpenThread instance.
  * @param[in]  aTimeout       The CSL timeout in seconds.

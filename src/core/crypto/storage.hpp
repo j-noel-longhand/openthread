@@ -112,10 +112,7 @@ constexpr KeyRef kPendingDatasetPskcRef       = OPENTHREAD_CONFIG_PSA_ITS_NVM_OF
  * @retval FALSE  If @p aKeyRef is not valid.
  *
  */
-inline bool IsKeyRefValid(KeyRef aKeyRef)
-{
-    return (aKeyRef < kInvalidKeyRef);
-}
+inline bool IsKeyRefValid(KeyRef aKeyRef) { return (aKeyRef < kInvalidKeyRef); }
 
 /**
  * Import a key into PSA ITS.
@@ -133,7 +130,7 @@ inline bool IsKeyRefValid(KeyRef aKeyRef)
  * @retval kErrorInvalidArgs   @p aKey was set to `nullptr`.
  *
  */
-inline Error ImportKey(KeyRef &       aKeyRef,
+inline Error ImportKey(KeyRef        &aKeyRef,
                        KeyType        aKeyType,
                        KeyAlgorithm   aKeyAlgorithm,
                        int            aKeyUsage,
@@ -187,10 +184,7 @@ inline void DestroyKey(KeyRef aKeyRef)
  * @retval false                Key Ref passed is invalid and has no key associated in PSA.
  *
  */
-inline bool HasKey(KeyRef aKeyRef)
-{
-    return otPlatCryptoHasKey(aKeyRef);
-}
+inline bool HasKey(KeyRef aKeyRef) { return otPlatCryptoHasKey(aKeyRef); }
 
 } // namespace Storage
 
@@ -210,7 +204,7 @@ public:
      * This method sets the `Key` as a literal key from a given byte array and length.
      *
      * @param[in] aKeyBytes   A pointer to buffer containing the key.
-     * @param[in] aKeyLength  The key length (number of bytes in @p akeyBytes).
+     * @param[in] aKeyLength  The key length (number of bytes in @p aKeyBytes).
      *
      */
     void Set(const uint8_t *aKeyBytes, uint16_t aKeyLength)

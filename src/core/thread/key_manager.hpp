@@ -401,10 +401,12 @@ public:
     /**
      * This method sets the current MAC Frame Counter value for all radio links.
      *
-     * @param[in]  aMacFrameCounter  The MAC Frame Counter value.
-     *
+     * @param[in] aFrameCounter  The MAC Frame Counter value.
+     * @param[in] aSetIfLarger   If `true`, set only if the new value @p aFrameCounter is larger than current value.
+     *                           If `false`, set the new value independent of the current value.
+
      */
-    void SetAllMacFrameCounters(uint32_t aMacFrameCounter);
+    void SetAllMacFrameCounters(uint32_t aFrameCounter, bool aSetIfLarger);
 
     /**
      * This method sets the MAC Frame Counter value which is stored in non-volatile memory.
@@ -445,7 +447,7 @@ public:
     void IncrementMleFrameCounter(void);
 
     /**
-     * This method returns the KEK as `KekKeyMaterail`
+     * This method returns the KEK as `KekKeyMaterial`
      *
      * @returns The KEK as `KekKeyMaterial`.
      *
@@ -551,6 +553,7 @@ public:
 private:
     static constexpr uint32_t kDefaultKeySwitchGuardTime = 624;
     static constexpr uint32_t kOneHourIntervalInMsec     = 3600u * 1000u;
+    static constexpr bool     kExportableMacKeys         = OPENTHREAD_CONFIG_PLATFORM_MAC_KEYS_EXPORTABLE_ENABLE;
 
     OT_TOOL_PACKED_BEGIN
     struct Keys
@@ -574,9 +577,8 @@ private:
     void ComputeTrelKey(uint32_t aKeySequence, Mac::Key &aKey);
 #endif
 
-    void        StartKeyRotationTimer(void);
-    static void HandleKeyRotationTimer(Timer &aTimer);
-    void        HandleKeyRotationTimer(void);
+    void StartKeyRotationTimer(void);
+    void HandleKeyRotationTimer(void);
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
     void StoreNetworkKey(const NetworkKey &aNetworkKey, bool aOverWriteExisting);
@@ -584,6 +586,8 @@ private:
 #endif
 
     void ResetFrameCounters(void);
+
+    using RotationTimer = TimerMilliIn<KeyManager, &KeyManager::HandleKeyRotationTimer>;
 
     static const uint8_t kThreadString[];
 
@@ -612,10 +616,10 @@ private:
     uint32_t               mStoredMacFrameCounter;
     uint32_t               mStoredMleFrameCounter;
 
-    uint32_t   mHoursSinceKeyRotation;
-    uint32_t   mKeySwitchGuardTime;
-    bool       mKeySwitchGuardEnabled;
-    TimerMilli mKeyRotationTimer;
+    uint32_t      mHoursSinceKeyRotation;
+    uint32_t      mKeySwitchGuardTime;
+    bool          mKeySwitchGuardEnabled;
+    RotationTimer mKeyRotationTimer;
 
 #if OPENTHREAD_CONFIG_PLATFORM_KEY_REFERENCES_ENABLE
     PskcRef mPskcRef;

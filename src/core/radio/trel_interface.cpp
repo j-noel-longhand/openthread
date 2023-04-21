@@ -59,7 +59,7 @@ Interface::Interface(Instance &aInstance)
     , mInitialized(false)
     , mEnabled(false)
     , mFiltered(false)
-    , mRegisterServiceTask(aInstance, HandleRegisterServiceTask)
+    , mRegisterServiceTask(aInstance)
 {
 }
 
@@ -73,6 +73,18 @@ void Interface::Init(void)
     {
         mEnabled = false;
         Enable();
+    }
+}
+
+void Interface::SetEnabled(bool aEnable)
+{
+    if (aEnable)
+    {
+        Enable();
+    }
+    else
+    {
+        Disable();
     }
 }
 
@@ -127,11 +139,6 @@ exit:
     return;
 }
 
-void Interface::HandleRegisterServiceTask(Tasklet &aTasklet)
-{
-    aTasklet.Get<Interface>().RegisterService();
-}
-
 void Interface::RegisterService(void)
 {
     // TXT data consists of two entries: the length fields, the
@@ -139,7 +146,8 @@ void Interface::RegisterService(void)
     // or Extended PAN ID values.
     static constexpr uint8_t kTxtDataSize =
         /* ExtAddr  */ sizeof(uint8_t) + sizeof(kTxtRecordExtAddressKey) - 1 + sizeof(char) + sizeof(Mac::ExtAddress) +
-        /* ExtPanId */ sizeof(uint8_t) + sizeof(kTxtRecordExtPanIdKey) - 1 + sizeof(char) + sizeof(Mac::ExtendedPanId);
+        /* ExtPanId */ sizeof(uint8_t) + sizeof(kTxtRecordExtPanIdKey) - 1 + sizeof(char) +
+        sizeof(MeshCoP::ExtendedPanId);
 
     uint8_t                        txtDataBuffer[kTxtDataSize];
     MutableData<kWithUint16Length> txtData;
@@ -148,14 +156,15 @@ void Interface::RegisterService(void)
     VerifyOrExit(mInitialized && mEnabled);
 
     txtEntries[0].Init(kTxtRecordExtAddressKey, Get<Mac::Mac>().GetExtAddress().m8, sizeof(Mac::ExtAddress));
-    txtEntries[1].Init(kTxtRecordExtPanIdKey, Get<Mac::Mac>().GetExtendedPanId().m8, sizeof(Mac::ExtendedPanId));
+    txtEntries[1].Init(kTxtRecordExtPanIdKey, Get<MeshCoP::ExtendedPanIdManager>().GetExtPanId().m8,
+                       sizeof(MeshCoP::ExtendedPanId));
 
     txtData.Init(txtDataBuffer, sizeof(txtDataBuffer));
     SuccessOrAssert(Dns::TxtEntry::AppendEntries(txtEntries, GetArrayLength(txtEntries), txtData));
 
     LogInfo("Registering DNS-SD service: port:%u, txt:\"%s=%s, %s=%s\"", mUdpPort, kTxtRecordExtAddressKey,
             Get<Mac::Mac>().GetExtAddress().ToString().AsCString(), kTxtRecordExtPanIdKey,
-            Get<Mac::Mac>().GetExtendedPanId().ToString().AsCString());
+            Get<MeshCoP::ExtendedPanIdManager>().GetExtPanId().ToString().AsCString());
 
     otPlatTrelRegisterService(&GetInstance(), mUdpPort, txtData.GetBytes(), static_cast<uint8_t>(txtData.GetLength()));
 
@@ -176,10 +185,10 @@ exit:
 
 void Interface::HandleDiscoveredPeerInfo(const Peer::Info &aInfo)
 {
-    Peer *             entry;
-    Mac::ExtAddress    extAddress;
-    Mac::ExtendedPanId extPanId;
-    bool               isNew = false;
+    Peer                  *entry;
+    Mac::ExtAddress        extAddress;
+    MeshCoP::ExtendedPanId extPanId;
+    bool                   isNew = false;
 
     VerifyOrExit(mInitialized && mEnabled);
 
@@ -237,9 +246,9 @@ exit:
     return;
 }
 
-Error Interface::ParsePeerInfoTxtData(const Peer::Info &  aInfo,
-                                      Mac::ExtAddress &   aExtAddress,
-                                      Mac::ExtendedPanId &aExtPanId) const
+Error Interface::ParsePeerInfoTxtData(const Peer::Info       &aInfo,
+                                      Mac::ExtAddress        &aExtAddress,
+                                      MeshCoP::ExtendedPanId &aExtPanId) const
 {
     Error                   error;
     Dns::TxtEntry           entry;
@@ -253,6 +262,15 @@ Error Interface::ParsePeerInfoTxtData(const Peer::Info &  aInfo,
 
     while ((error = iterator.GetNextEntry(entry)) == kErrorNone)
     {
+        // If the TXT data happens to have entries with key longer
+        // than `kMaxKeyLength`, `mKey` would be `nullptr` and full
+        // entry would be placed in `mValue`. We skip over such
+        // entries.
+        if (entry.mKey == nullptr)
+        {
+            continue;
+        }
+
         if (strcmp(entry.mKey, kTxtRecordExtAddressKey) == 0)
         {
             VerifyOrExit(!parsedExtAddress, error = kErrorParse);
@@ -263,8 +281,8 @@ Error Interface::ParsePeerInfoTxtData(const Peer::Info &  aInfo,
         else if (strcmp(entry.mKey, kTxtRecordExtPanIdKey) == 0)
         {
             VerifyOrExit(!parsedExtPanId, error = kErrorParse);
-            VerifyOrExit(entry.mValueLength == sizeof(Mac::ExtendedPanId), error = kErrorParse);
-            memcpy(aExtPanId.m8, entry.mValue, sizeof(Mac::ExtendedPanId));
+            VerifyOrExit(entry.mValueLength == sizeof(MeshCoP::ExtendedPanId), error = kErrorParse);
+            memcpy(aExtPanId.m8, entry.mValue, sizeof(MeshCoP::ExtendedPanId));
             parsedExtPanId = true;
         }
 
@@ -289,7 +307,7 @@ Interface::Peer *Interface::GetNewPeerEntry(void)
 
     for (Peer &entry : mPeerTable)
     {
-        if (entry.GetExtPanId() != Get<Mac::Mac>().GetExtendedPanId())
+        if (entry.GetExtPanId() != Get<MeshCoP::ExtendedPanIdManager>().GetExtPanId())
         {
             ExitNow(peerEntry = &entry);
         }
@@ -353,7 +371,7 @@ Error Interface::Send(const Packet &aPacket, bool aIsDiscovery)
     case Header::kTypeBroadcast:
         for (Peer &entry : mPeerTable)
         {
-            if (!aIsDiscovery && (entry.GetExtPanId() != Get<Mac::Mac>().GetExtendedPanId()))
+            if (!aIsDiscovery && (entry.GetExtPanId() != Get<MeshCoP::ExtendedPanIdManager>().GetExtPanId()))
             {
                 continue;
             }

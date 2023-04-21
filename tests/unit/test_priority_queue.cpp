@@ -44,14 +44,15 @@ void VerifyPriorityQueueContent(ot::PriorityQueue &aPriorityQueue, int aExpected
 {
     const ot::PriorityQueue &constQueue = aPriorityQueue;
     va_list                  args;
-    ot::Message *            message;
-    ot::Message *            msgArg;
+    ot::Message             *message;
+    ot::Message             *msgArg;
     int8_t                   curPriority = ot::Message::kNumPriorities;
-    uint16_t                 msgCount, bufCount;
+    ot::PriorityQueue::Info  info;
 
     // Check the `GetInfo`
-    aPriorityQueue.GetInfo(msgCount, bufCount);
-    VerifyOrQuit(msgCount == aExpectedLength, "GetInfo() result does not match expected len.");
+    memset(&info, 0, sizeof(info));
+    aPriorityQueue.GetInfo(info);
+    VerifyOrQuit(info.mNumMessages == aExpectedLength, "GetInfo() result does not match expected len.");
 
     va_start(args, aExpectedLength);
 
@@ -167,14 +168,14 @@ void VerifyMsgQueueContent(ot::MessageQueue &aMessageQueue, int aExpectedLength,
 
 void TestPriorityQueue(void)
 {
-    ot::Instance *    instance;
-    ot::MessagePool * messagePool;
+    ot::Instance     *instance;
+    ot::MessagePool  *messagePool;
     ot::PriorityQueue queue;
     ot::MessageQueue  messageQueue;
-    ot::Message *     msgNet[kNumTestMessages];
-    ot::Message *     msgHigh[kNumTestMessages];
-    ot::Message *     msgNor[kNumTestMessages];
-    ot::Message *     msgLow[kNumTestMessages];
+    ot::Message      *msgNet[kNumTestMessages];
+    ot::Message      *msgHigh[kNumTestMessages];
+    ot::Message      *msgNor[kNumTestMessages];
+    ot::Message      *msgLow[kNumTestMessages];
 
     instance = testInitInstance();
     VerifyOrQuit(instance != nullptr, "Null OpenThread instance");

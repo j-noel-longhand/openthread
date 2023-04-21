@@ -72,7 +72,6 @@ void SecurityPolicy::SetToDefaultFlags(void)
     mNativeCommissioningEnabled     = true;
     mRoutersEnabled                 = true;
     mExternalCommissioningEnabled   = true;
-    mBeaconsEnabled                 = true;
     mCommercialCommissioningEnabled = false;
     mAutonomousEnrollmentEnabled    = false;
     mNetworkKeyProvisioningEnabled  = false;
@@ -91,7 +90,6 @@ void SecurityPolicy::SetFlags(const uint8_t *aFlags, uint8_t aFlagsLength)
     mNativeCommissioningEnabled     = aFlags[0] & kNativeCommissioningMask;
     mRoutersEnabled                 = aFlags[0] & kRoutersMask;
     mExternalCommissioningEnabled   = aFlags[0] & kExternalCommissioningMask;
-    mBeaconsEnabled                 = aFlags[0] & kBeaconsMask;
     mCommercialCommissioningEnabled = (aFlags[0] & kCommercialCommissioningMask) == 0;
     mAutonomousEnrollmentEnabled    = (aFlags[0] & kAutonomousEnrollmentMask) == 0;
     mNetworkKeyProvisioningEnabled  = (aFlags[0] & kNetworkKeyProvisioningMask) == 0;
@@ -129,11 +127,6 @@ void SecurityPolicy::GetFlags(uint8_t *aFlags, uint8_t aFlagsLength) const
     if (mExternalCommissioningEnabled)
     {
         aFlags[0] |= kExternalCommissioningMask;
-    }
-
-    if (mBeaconsEnabled)
-    {
-        aFlags[0] |= kBeaconsMask;
     }
 
     if (!mCommercialCommissioningEnabled)
@@ -179,7 +172,7 @@ KeyManager::KeyManager(Instance &aInstance)
     , mHoursSinceKeyRotation(0)
     , mKeySwitchGuardTime(kDefaultKeySwitchGuardTime)
     , mKeySwitchGuardEnabled(false)
-    , mKeyRotationTimer(aInstance, KeyManager::HandleKeyRotationTimer)
+    , mKeyRotationTimer(aInstance)
     , mKekFrameCounter(0)
     , mIsPskcSet(false)
 {
@@ -209,10 +202,7 @@ void KeyManager::Start(void)
     StartKeyRotationTimer();
 }
 
-void KeyManager::Stop(void)
-{
-    mKeyRotationTimer.Stop();
-}
+void KeyManager::Stop(void) { mKeyRotationTimer.Stop(); }
 
 void KeyManager::SetPskc(const Pskc &aPskc)
 {
@@ -248,7 +238,7 @@ void KeyManager::ResetFrameCounters(void)
 
 #if OPENTHREAD_FTD
     // reset router frame counters
-    for (Router &router : Get<RouterTable>().Iterate())
+    for (Router &router : Get<RouterTable>())
     {
         router.SetKeySequence(0);
         router.GetLinkFrameCounters().Reset();
@@ -350,13 +340,13 @@ void KeyManager::UpdateKeyMaterial(void)
         Mac::KeyMaterial prevKey;
         Mac::KeyMaterial nextKey;
 
-        curKey.SetFrom(hashKeys.GetMacKey());
+        curKey.SetFrom(hashKeys.GetMacKey(), kExportableMacKeys);
 
         ComputeKeys(mKeySequence - 1, hashKeys);
-        prevKey.SetFrom(hashKeys.GetMacKey());
+        prevKey.SetFrom(hashKeys.GetMacKey(), kExportableMacKeys);
 
         ComputeKeys(mKeySequence + 1, hashKeys);
-        nextKey.SetFrom(hashKeys.GetMacKey());
+        nextKey.SetFrom(hashKeys.GetMacKey(), kExportableMacKeys);
 
         Get<Mac::SubMac>().SetMacKey(Mac::Frame::kKeyIdMode1, (mKeySequence & 0x7f) + 1, prevKey, curKey, nextKey);
     }
@@ -391,7 +381,7 @@ void KeyManager::SetCurrentKeySequence(uint32_t aKeySequence)
     mKeySequence = aKeySequence;
     UpdateKeyMaterial();
 
-    SetAllMacFrameCounters(0);
+    SetAllMacFrameCounters(0, /* aSetIfLarger */ false);
     mMleFrameCounter = 0;
 
     Get<Notifier>().Signal(kEventThreadKeySeqCounterChanged);
@@ -422,12 +412,14 @@ const Mac::KeyMaterial &KeyManager::GetTemporaryTrelMacKey(uint32_t aKeySequence
 }
 #endif
 
-void KeyManager::SetAllMacFrameCounters(uint32_t aMacFrameCounter)
+void KeyManager::SetAllMacFrameCounters(uint32_t aFrameCounter, bool aSetIfLarger)
 {
-    mMacFrameCounters.SetAll(aMacFrameCounter);
+    mMacFrameCounters.SetAll(aFrameCounter);
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_IEEE_802_15_4_ENABLE
-    Get<Mac::SubMac>().SetFrameCounter(aMacFrameCounter);
+    Get<Mac::SubMac>().SetFrameCounter(aFrameCounter, aSetIfLarger);
+#else
+    OT_UNUSED_VARIABLE(aSetIfLarger);
 #endif
 }
 
@@ -451,9 +443,7 @@ exit:
     return;
 }
 #else
-void KeyManager::MacFrameCounterUsed(uint32_t)
-{
-}
+void KeyManager::MacFrameCounterUsed(uint32_t) {}
 #endif
 
 #if OPENTHREAD_CONFIG_RADIO_LINK_TREL_ENABLE
@@ -502,11 +492,6 @@ void KeyManager::StartKeyRotationTimer(void)
 {
     mHoursSinceKeyRotation = 0;
     mKeyRotationTimer.Start(kOneHourIntervalInMsec);
-}
-
-void KeyManager::HandleKeyRotationTimer(Timer &aTimer)
-{
-    aTimer.Get<KeyManager>().HandleKeyRotationTimer();
 }
 
 void KeyManager::HandleKeyRotationTimer(void)

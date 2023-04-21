@@ -125,6 +125,7 @@ SOURCES_COMMON                                  = \
     api/backbone_router_ftd_api.cpp               \
     api/border_agent_api.cpp                      \
     api/border_router_api.cpp                     \
+    api/border_routing_api.cpp                    \
     api/channel_manager_api.cpp                   \
     api/channel_monitor_api.cpp                   \
     api/child_supervision_api.cpp                 \
@@ -150,8 +151,10 @@ SOURCES_COMMON                                  = \
     api/link_metrics_api.cpp                      \
     api/link_raw_api.cpp                          \
     api/logging_api.cpp                           \
+    api/mesh_diag_api.cpp                         \
     api/message_api.cpp                           \
     api/multi_radio_api.cpp                       \
+    api/nat64_api.cpp                             \
     api/netdata_api.cpp                           \
     api/netdata_publisher_api.cpp                 \
     api/netdiag_api.cpp                           \
@@ -166,6 +169,7 @@ SOURCES_COMMON                                  = \
     api/srp_server_api.cpp                        \
     api/tasklet_api.cpp                           \
     api/tcp_api.cpp                               \
+    api/tcp_ext_api.cpp                           \
     api/thread_api.cpp                            \
     api/thread_ftd_api.cpp                        \
     api/trel_api.cpp                              \
@@ -176,8 +180,7 @@ SOURCES_COMMON                                  = \
     backbone_router/bbr_manager.cpp               \
     backbone_router/multicast_listeners_table.cpp \
     backbone_router/ndproxy_table.cpp             \
-    border_router/infra_if_platform.cpp           \
-    border_router/router_advertisement.cpp        \
+    border_router/infra_if.cpp                    \
     border_router/routing_manager.cpp             \
     coap/coap.cpp                                 \
     coap/coap_message.cpp                         \
@@ -187,6 +190,8 @@ SOURCES_COMMON                                  = \
     common/crc16.cpp                              \
     common/data.cpp                               \
     common/error.cpp                              \
+    common/frame_builder.cpp                      \
+    common/frame_data.cpp                         \
     common/heap.cpp                               \
     common/heap_data.cpp                          \
     common/heap_string.cpp                        \
@@ -194,7 +199,8 @@ SOURCES_COMMON                                  = \
     common/log.cpp                                \
     common/message.cpp                            \
     common/notifier.cpp                           \
-    common/random_manager.cpp                     \
+    common/preference.cpp                         \
+    common/random.cpp                             \
     common/settings.cpp                           \
     common/string.cpp                             \
     common/tasklet.cpp                            \
@@ -206,12 +212,9 @@ SOURCES_COMMON                                  = \
     crypto/aes_ccm.cpp                            \
     crypto/aes_ecb.cpp                            \
     crypto/crypto_platform.cpp                    \
-    crypto/ecdsa.cpp                              \
-    crypto/ecdsa_tinycrypt.cpp                    \
     crypto/hkdf_sha256.cpp                        \
     crypto/hmac_sha256.cpp                        \
     crypto/mbedtls.cpp                            \
-    crypto/pbkdf2_cmac.cpp                        \
     crypto/sha256.cpp                             \
     crypto/storage.cpp                            \
     diags/factory_diags.cpp                       \
@@ -236,11 +239,13 @@ SOURCES_COMMON                                  = \
     meshcop/dataset_updater.cpp                   \
     meshcop/dtls.cpp                              \
     meshcop/energy_scan_client.cpp                \
+    meshcop/extended_panid.cpp                    \
     meshcop/joiner.cpp                            \
     meshcop/joiner_router.cpp                     \
     meshcop/meshcop.cpp                           \
     meshcop/meshcop_leader.cpp                    \
     meshcop/meshcop_tlvs.cpp                      \
+    meshcop/network_name.cpp                      \
     meshcop/panid_query_client.cpp                \
     meshcop/timestamp.cpp                         \
     net/checksum.cpp                              \
@@ -248,15 +253,18 @@ SOURCES_COMMON                                  = \
     net/dhcp6_server.cpp                          \
     net/dns_client.cpp                            \
     net/dns_dso.cpp                               \
+    net/dns_platform.cpp                          \
     net/dns_types.cpp                             \
     net/dnssd_server.cpp                          \
     net/icmp6.cpp                                 \
-    net/ip4_address.cpp                           \
+    net/ip4_types.cpp                             \
     net/ip6.cpp                                   \
     net/ip6_address.cpp                           \
     net/ip6_filter.cpp                            \
     net/ip6_headers.cpp                           \
     net/ip6_mpl.cpp                               \
+    net/nat64_translator.cpp                      \
+    net/nd6.cpp                                   \
     net/nd_agent.cpp                              \
     net/netif.cpp                                 \
     net/sntp_client.cpp                           \
@@ -264,6 +272,7 @@ SOURCES_COMMON                                  = \
     net/srp_client.cpp                            \
     net/srp_server.cpp                            \
     net/tcp6.cpp                                  \
+    net/tcp6_ext.cpp                              \
     net/udp6.cpp                                  \
     radio/radio.cpp                               \
     radio/radio_callbacks.cpp                     \
@@ -275,6 +284,7 @@ SOURCES_COMMON                                  = \
     thread/announce_begin_server.cpp              \
     thread/announce_sender.cpp                    \
     thread/anycast_locator.cpp                    \
+    thread/child_supervision.cpp                  \
     thread/child_table.cpp                        \
     thread/csl_tx_scheduler.cpp                   \
     thread/discover_scanner.cpp                   \
@@ -283,6 +293,7 @@ SOURCES_COMMON                                  = \
     thread/indirect_sender.cpp                    \
     thread/key_manager.cpp                        \
     thread/link_metrics.cpp                       \
+    thread/link_metrics_types.cpp                 \
     thread/link_quality.cpp                       \
     thread/lowpan.cpp                             \
     thread/mesh_forwarder.cpp                     \
@@ -290,6 +301,7 @@ SOURCES_COMMON                                  = \
     thread/mesh_forwarder_mtd.cpp                 \
     thread/mle.cpp                                \
     thread/mle_router.cpp                         \
+    thread/mle_tlvs.cpp                           \
     thread/mle_types.cpp                          \
     thread/mlr_manager.cpp                        \
     thread/neighbor_table.cpp                     \
@@ -314,14 +326,15 @@ SOURCES_COMMON                                  = \
     thread/uri_paths.cpp                          \
     utils/channel_manager.cpp                     \
     utils/channel_monitor.cpp                     \
-    utils/child_supervision.cpp                   \
     utils/flash.cpp                               \
     utils/heap.cpp                                \
     utils/history_tracker.cpp                     \
     utils/jam_detector.cpp                        \
+    utils/mesh_diag.cpp                           \
     utils/otns.cpp                                \
     utils/parse_cmdline.cpp                       \
     utils/ping_sender.cpp                         \
+    utils/power_calibration.cpp                   \
     utils/slaac_address.cpp                       \
     utils/srp_client_buffers.cpp                  \
     $(NULL)
@@ -336,9 +349,10 @@ RADIO_SOURCES_COMMON                       = \
     api/tasklet_api.cpp                      \
     common/binary_search.cpp                 \
     common/error.cpp                         \
+    common/frame_builder.cpp                 \
     common/instance.cpp                      \
     common/log.cpp                           \
-    common/random_manager.cpp                \
+    common/random.cpp                        \
     common/string.cpp                        \
     common/tasklet.cpp                       \
     common/timer.cpp                         \
@@ -358,6 +372,7 @@ RADIO_SOURCES_COMMON                       = \
     radio/radio_platform.cpp                 \
     thread/link_quality.cpp                  \
     utils/parse_cmdline.cpp                  \
+    utils/power_calibration.cpp              \
     $(NULL)
 
 EXTRA_DIST                                 = \
@@ -413,7 +428,7 @@ HEADERS_COMMON                                  = \
     backbone_router/bbr_manager.hpp               \
     backbone_router/multicast_listeners_table.hpp \
     backbone_router/ndproxy_table.hpp             \
-    border_router/router_advertisement.hpp        \
+    border_router/infra_if.hpp                    \
     border_router/routing_manager.hpp             \
     coap/coap.hpp                                 \
     coap/coap_message.hpp                         \
@@ -424,6 +439,7 @@ HEADERS_COMMON                                  = \
     common/as_core_type.hpp                       \
     common/binary_search.hpp                      \
     common/bit_vector.hpp                         \
+    common/callback.hpp                           \
     common/clearable.hpp                          \
     common/code_utils.hpp                         \
     common/const_cast.hpp                         \
@@ -434,6 +450,8 @@ HEADERS_COMMON                                  = \
     common/equatable.hpp                          \
     common/error.hpp                              \
     common/extension.hpp                          \
+    common/frame_builder.hpp                      \
+    common/frame_data.hpp                         \
     common/heap.hpp                               \
     common/heap_allocatable.hpp                   \
     common/heap_array.hpp                         \
@@ -450,13 +468,14 @@ HEADERS_COMMON                                  = \
     common/new.hpp                                \
     common/non_copyable.hpp                       \
     common/notifier.hpp                           \
+    common/num_utils.hpp                          \
     common/numeric_limits.hpp                     \
     common/owned_ptr.hpp                          \
     common/owning_list.hpp                        \
     common/pool.hpp                               \
+    common/preference.hpp                         \
     common/ptr_wrapper.hpp                        \
     common/random.hpp                             \
-    common/random_manager.hpp                     \
     common/retain_ptr.hpp                         \
     common/serial_number.hpp                      \
     common/settings.hpp                           \
@@ -472,7 +491,9 @@ HEADERS_COMMON                                  = \
     common/uptime.hpp                             \
     config/announce_sender.h                      \
     config/backbone_router.h                      \
+    config/border_agent.h                         \
     config/border_router.h                        \
+    config/border_routing.h                       \
     config/channel_manager.h                      \
     config/channel_monitor.h                      \
     config/child_supervision.h                    \
@@ -494,13 +515,16 @@ HEADERS_COMMON                                  = \
     config/link_raw.h                             \
     config/logging.h                              \
     config/mac.h                                  \
+    config/mesh_diag.h                            \
     config/misc.h                                 \
     config/mle.h                                  \
+    config/nat64.h                                \
     config/netdata_publisher.h                    \
     config/openthread-core-config-check.h         \
     config/parent_search.h                        \
     config/ping_sender.h                          \
     config/platform.h                             \
+    config/power_calibration.h                    \
     config/radio_link.h                           \
     config/sntp_client.h                          \
     config/srp_client.h                           \
@@ -514,7 +538,6 @@ HEADERS_COMMON                                  = \
     crypto/hkdf_sha256.hpp                        \
     crypto/hmac_sha256.hpp                        \
     crypto/mbedtls.hpp                            \
-    crypto/pbkdf2_cmac.hpp                        \
     crypto/sha256.hpp                             \
     crypto/storage.hpp                            \
     diags/factory_diags.hpp                       \
@@ -537,11 +560,13 @@ HEADERS_COMMON                                  = \
     meshcop/dataset_updater.hpp                   \
     meshcop/dtls.hpp                              \
     meshcop/energy_scan_client.hpp                \
+    meshcop/extended_panid.hpp                    \
     meshcop/joiner.hpp                            \
     meshcop/joiner_router.hpp                     \
     meshcop/meshcop.hpp                           \
     meshcop/meshcop_leader.hpp                    \
     meshcop/meshcop_tlvs.hpp                      \
+    meshcop/network_name.hpp                      \
     meshcop/panid_query_client.hpp                \
     meshcop/timestamp.hpp                         \
     net/checksum.hpp                              \
@@ -553,13 +578,15 @@ HEADERS_COMMON                                  = \
     net/dns_types.hpp                             \
     net/dnssd_server.hpp                          \
     net/icmp6.hpp                                 \
-    net/ip4_address.hpp                           \
+    net/ip4_types.hpp                             \
     net/ip6.hpp                                   \
     net/ip6_address.hpp                           \
     net/ip6_filter.hpp                            \
     net/ip6_headers.hpp                           \
     net/ip6_mpl.hpp                               \
     net/ip6_types.hpp                             \
+    net/nat64_translator.hpp                      \
+    net/nd6.hpp                                   \
     net/nd_agent.hpp                              \
     net/netif.hpp                                 \
     net/sntp_client.hpp                           \
@@ -567,6 +594,7 @@ HEADERS_COMMON                                  = \
     net/srp_client.hpp                            \
     net/srp_server.hpp                            \
     net/tcp6.hpp                                  \
+    net/tcp6_ext.hpp                              \
     net/udp6.hpp                                  \
     openthread-core-config.h                      \
     radio/max_power_table.hpp                     \
@@ -579,6 +607,7 @@ HEADERS_COMMON                                  = \
     thread/announce_sender.hpp                    \
     thread/anycast_locator.hpp                    \
     thread/child_mask.hpp                         \
+    thread/child_supervision.hpp                  \
     thread/child_table.hpp                        \
     thread/csl_tx_scheduler.hpp                   \
     thread/discover_scanner.hpp                   \
@@ -589,6 +618,7 @@ HEADERS_COMMON                                  = \
     thread/key_manager.hpp                        \
     thread/link_metrics.hpp                       \
     thread/link_metrics_tlvs.hpp                  \
+    thread/link_metrics_types.hpp                 \
     thread/link_quality.hpp                       \
     thread/lowpan.hpp                             \
     thread/mesh_forwarder.hpp                     \
@@ -620,16 +650,18 @@ HEADERS_COMMON                                  = \
     thread/tmf.hpp                                \
     thread/topology.hpp                           \
     thread/uri_paths.hpp                          \
+    thread/version.hpp                            \
     utils/channel_manager.hpp                     \
     utils/channel_monitor.hpp                     \
-    utils/child_supervision.hpp                   \
     utils/flash.hpp                               \
     utils/heap.hpp                                \
     utils/history_tracker.hpp                     \
     utils/jam_detector.hpp                        \
+    utils/mesh_diag.hpp                           \
     utils/otns.hpp                                \
     utils/parse_cmdline.hpp                       \
     utils/ping_sender.hpp                         \
+    utils/power_calibration.hpp                   \
     utils/slaac_address.hpp                       \
     utils/srp_client_buffers.hpp                  \
     $(NULL)

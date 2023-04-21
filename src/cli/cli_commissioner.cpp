@@ -117,13 +117,15 @@ template <> otError Commissioner::Process<Cmd("joiner")>(Arg aArgs[])
                 break;
 
             case OT_JOINER_INFO_TYPE_DISCERNER:
-                OutputFormat("| 0x%016llx/%2u", static_cast<unsigned long long>(joinerInfo.mSharedId.mDiscerner.mValue),
+                OutputFormat("| 0x%08lx%08lx/%2u",
+                             static_cast<unsigned long>(joinerInfo.mSharedId.mDiscerner.mValue >> 32),
+                             static_cast<unsigned long>(joinerInfo.mSharedId.mDiscerner.mValue & 0xffffffff),
                              joinerInfo.mSharedId.mDiscerner.mLength);
                 break;
             }
 
-            OutputFormat(" | %32s | %10d |", joinerInfo.mPskd.m8, joinerInfo.mExpirationTime);
-            OutputLine("");
+            OutputFormat(" | %32s | %10lu |", joinerInfo.mPskd.m8, ToUlong(joinerInfo.mExpirationTime));
+            OutputNewLine();
         }
 
         ExitNow(error = OT_ERROR_NONE);
@@ -332,6 +334,23 @@ template <> otError Commissioner::Process<Cmd("sessionid")>(Arg aArgs[])
     return OT_ERROR_NONE;
 }
 
+template <> otError Commissioner::Process<Cmd("id")>(Arg aArgs[])
+{
+    otError error;
+
+    if (aArgs[0].IsEmpty())
+    {
+        OutputLine("%s", otCommissionerGetId(GetInstancePtr()));
+        error = OT_ERROR_NONE;
+    }
+    else
+    {
+        error = otCommissionerSetId(GetInstancePtr(), aArgs[0].GetCString());
+    }
+
+    return error;
+}
+
 template <> otError Commissioner::Process<Cmd("start")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -366,16 +385,16 @@ const char *Commissioner::StateToString(otCommissionerState aState)
 }
 
 void Commissioner::HandleJoinerEvent(otCommissionerJoinerEvent aEvent,
-                                     const otJoinerInfo *      aJoinerInfo,
-                                     const otExtAddress *      aJoinerId,
-                                     void *                    aContext)
+                                     const otJoinerInfo       *aJoinerInfo,
+                                     const otExtAddress       *aJoinerId,
+                                     void                     *aContext)
 {
     static_cast<Commissioner *>(aContext)->HandleJoinerEvent(aEvent, aJoinerInfo, aJoinerId);
 }
 
 void Commissioner::HandleJoinerEvent(otCommissionerJoinerEvent aEvent,
-                                     const otJoinerInfo *      aJoinerInfo,
-                                     const otExtAddress *      aJoinerId)
+                                     const otJoinerInfo       *aJoinerInfo,
+                                     const otExtAddress       *aJoinerId)
 {
     static const char *const kEventStrings[] = {
         "start",    // (0) OT_COMMISSIONER_JOINER_START
@@ -400,7 +419,7 @@ void Commissioner::HandleJoinerEvent(otCommissionerJoinerEvent aEvent,
         OutputExtAddress(*aJoinerId);
     }
 
-    OutputLine("");
+    OutputNewLine();
 }
 
 template <> otError Commissioner::Process<Cmd("stop")>(Arg aArgs[])
@@ -414,7 +433,7 @@ template <> otError Commissioner::Process<Cmd("state")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
 
-    OutputLine(StateToString(otCommissionerGetState(GetInstancePtr())));
+    OutputLine("%s", StateToString(otCommissionerGetState(GetInstancePtr())));
 
     return OT_ERROR_NONE;
 }
@@ -427,10 +446,9 @@ otError Commissioner::Process(Arg aArgs[])
     }
 
     static constexpr Command kCommands[] = {
-        CmdEntry("announce"),        CmdEntry("energy"),    CmdEntry("joiner"),
-        CmdEntry("mgmtget"),         CmdEntry("mgmtset"),   CmdEntry("panid"),
-        CmdEntry("provisioningurl"), CmdEntry("sessionid"), CmdEntry("start"),
-        CmdEntry("state"),           CmdEntry("stop"),
+        CmdEntry("announce"),  CmdEntry("energy"),  CmdEntry("id"),    CmdEntry("joiner"),
+        CmdEntry("mgmtget"),   CmdEntry("mgmtset"), CmdEntry("panid"), CmdEntry("provisioningurl"),
+        CmdEntry("sessionid"), CmdEntry("start"),   CmdEntry("state"), CmdEntry("stop"),
     };
 
 #undef CmdEntry
@@ -458,21 +476,21 @@ exit:
 void Commissioner::HandleEnergyReport(uint32_t       aChannelMask,
                                       const uint8_t *aEnergyList,
                                       uint8_t        aEnergyListLength,
-                                      void *         aContext)
+                                      void          *aContext)
 {
     static_cast<Commissioner *>(aContext)->HandleEnergyReport(aChannelMask, aEnergyList, aEnergyListLength);
 }
 
 void Commissioner::HandleEnergyReport(uint32_t aChannelMask, const uint8_t *aEnergyList, uint8_t aEnergyListLength)
 {
-    OutputFormat("Energy: %08x ", aChannelMask);
+    OutputFormat("Energy: %08lx ", ToUlong(aChannelMask));
 
     for (uint8_t i = 0; i < aEnergyListLength; i++)
     {
         OutputFormat("%d ", static_cast<int8_t>(aEnergyList[i]));
     }
 
-    OutputLine("");
+    OutputNewLine();
 }
 
 void Commissioner::HandlePanIdConflict(uint16_t aPanId, uint32_t aChannelMask, void *aContext)
@@ -482,7 +500,7 @@ void Commissioner::HandlePanIdConflict(uint16_t aPanId, uint32_t aChannelMask, v
 
 void Commissioner::HandlePanIdConflict(uint16_t aPanId, uint32_t aChannelMask)
 {
-    OutputLine("Conflict: %04x, %08x", aPanId, aChannelMask);
+    OutputLine("Conflict: %04x, %08lx", aPanId, ToUlong(aChannelMask));
 }
 
 } // namespace Cli

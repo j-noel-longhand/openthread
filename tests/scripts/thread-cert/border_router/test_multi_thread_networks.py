@@ -93,19 +93,19 @@ class MultiThreadNetworks(thread_cert.TestCase):
         router2 = self.nodes[ROUTER2]
 
         br1.start()
-        self.simulator.go(5)
+        self.simulator.go(config.LEADER_STARTUP_DELAY)
         self.assertEqual('leader', br1.get_state())
 
         router1.start()
-        self.simulator.go(5)
+        self.simulator.go(config.ROUTER_STARTUP_DELAY)
         self.assertEqual('router', router1.get_state())
 
         br2.start()
-        self.simulator.go(5)
+        self.simulator.go(config.LEADER_STARTUP_DELAY)
         self.assertEqual('leader', br2.get_state())
 
         router2.start()
-        self.simulator.go(5)
+        self.simulator.go(config.ROUTER_STARTUP_DELAY)
         self.assertEqual('router', router2.get_state())
 
         # Wait for network to stabilize
@@ -146,7 +146,21 @@ class MultiThreadNetworks(thread_cert.TestCase):
         self.assertTrue(len(router2.get_ip6_address(config.ADDRESS_TYPE.OMR)) == 1)
 
         self.assertTrue(router1.ping(router2.get_ip6_address(config.ADDRESS_TYPE.OMR)[0]))
+        self.verify_border_routing_counters(br1, {'inbound_unicast': 1, 'outbound_unicast': 1})
+        self.verify_border_routing_counters(br2, {'inbound_unicast': 1, 'outbound_unicast': 1})
         self.assertTrue(router2.ping(router1.get_ip6_address(config.ADDRESS_TYPE.OMR)[0]))
+        self.verify_border_routing_counters(br1, {'inbound_unicast': 1, 'outbound_unicast': 1})
+        self.verify_border_routing_counters(br2, {'inbound_unicast': 1, 'outbound_unicast': 1})
+        self.assertGreater(br1.get_border_routing_counters()['ra_rx'], 0)
+        self.assertGreater(br1.get_border_routing_counters()['ra_tx_success'], 0)
+        self.assertGreater(br1.get_border_routing_counters()['rs_tx_success'], 0)
+
+    def verify_border_routing_counters(self, br, expect_delta):
+        delta_counters = br.read_border_routing_counters_delta()
+        self.assertEqual(set(delta_counters.keys()), set(expect_delta.keys()))
+        for key in delta_counters:
+            self.assertEqual(delta_counters[key][0], expect_delta[key])
+            self.assertGreater(delta_counters[key][1], 0)
 
 
 if __name__ == '__main__':

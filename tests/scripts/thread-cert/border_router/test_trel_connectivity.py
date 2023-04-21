@@ -28,7 +28,9 @@
 #
 import unittest
 
+import config
 import thread_cert
+
 # Test description:
 #   This test verifies TREL connectivity.
 #
@@ -102,8 +104,14 @@ class TestTrelConnectivity(thread_cert.TestCase):
         br2 = self.nodes[BR2]
         router2 = self.nodes[ROUTER2]
 
-        if br1.get_trel_state() is None:
-            self.skipTest("TREL is not enabled")
+        if br1.is_trel_enabled() is None:
+            self.skipTest("TREL is not supported")
+
+        if br1.is_trel_enabled() == False:
+            br1.enable_trel()
+
+        if br2.is_trel_enabled() == False:
+            br2.enable_trel()
 
         br1.start()
         self.wait_node_state(br1, 'leader', 10)
@@ -124,7 +132,7 @@ class TestTrelConnectivity(thread_cert.TestCase):
         self.wait_node_state(router2, 'router', 10)
 
         # Allow the network to stabilize
-        self.simulator.go(10)
+        self.simulator.go(config.BORDER_ROUTER_STARTUP_DELAY)
 
         self.collect_ipaddrs()
         self.collect_rloc16s()

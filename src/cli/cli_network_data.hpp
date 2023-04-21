@@ -47,7 +47,7 @@ namespace Cli {
  * This class implements the Network Data CLI.
  *
  */
-class NetworkData : private OutputWrapper
+class NetworkData : private Output
 {
 public:
     typedef Utils::CmdLineParser::Arg Arg;
@@ -67,11 +67,12 @@ public:
     /**
      * Constructor
      *
-     * @param[in]  aOutput The CLI console output context
+     * @param[in]  aInstance            The OpenThread Instance.
+     * @param[in]  aOutputImplementer   An `OutputImplementer`.
      *
      */
-    explicit NetworkData(Output &aOutput)
-        : OutputWrapper(aOutput)
+    NetworkData(otInstance *aInstance, OutputImplementer &aOutputImplementer)
+        : Output(aInstance, aOutputImplementer)
     {
     }
 
@@ -125,16 +126,6 @@ public:
      */
     static void RouteFlagsToString(const otExternalRouteConfig &aConfig, FlagsString &aString);
 
-    /**
-     * This static method converts a route preference value to human-readable string.
-     *
-     * @param[in] aPreference   The preference value to convert (`OT_ROUTE_PREFERENCE_*` values).
-     *
-     * @returns A string representation @p aPreference.
-     *
-     */
-    static const char *PreferenceToString(signed int aPreference);
-
 private:
     using Command = CommandEntry<NetworkData>;
 
@@ -148,6 +139,7 @@ private:
     void    OutputPrefixes(bool aLocal);
     void    OutputRoutes(bool aLocal);
     void    OutputServices(bool aLocal);
+    void    OutputLowpanContexts(bool aLocal);
 };
 
 } // namespace Cli

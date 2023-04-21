@@ -40,7 +40,7 @@
 
 #define kNumTestMessages 5
 
-static ot::Instance *   sInstance;
+static ot::Instance    *sInstance;
 static ot::MessagePool *sMessagePool;
 
 // This function verifies the content of the message queue to match the passed in messages
@@ -48,8 +48,8 @@ void VerifyMessageQueueContent(ot::MessageQueue &aMessageQueue, int aExpectedLen
 {
     const ot::MessageQueue &constQueue = aMessageQueue;
     va_list                 args;
-    ot::Message *           message;
-    ot::Message *           msgArg;
+    ot::Message            *message;
+    ot::Message            *msgArg;
 
     va_start(args, aExpectedLength);
 
@@ -102,9 +102,9 @@ void VerifyMessageQueueContent(ot::MessageQueue &aMessageQueue, int aExpectedLen
 
 void TestMessageQueue(void)
 {
-    ot::MessageQueue messageQueue;
-    ot::Message *    messages[kNumTestMessages];
-    uint16_t         msgCount, bufferCount;
+    ot::MessageQueue       messageQueue;
+    ot::Message           *messages[kNumTestMessages];
+    ot::MessageQueue::Info info;
 
     sInstance = testInitInstance();
     VerifyOrQuit(sInstance != nullptr);
@@ -144,8 +144,9 @@ void TestMessageQueue(void)
     VerifyMessageQueueContent(messageQueue, 5, messages[0], messages[1], messages[2], messages[3], messages[4]);
 
     // Check the GetInfo()
-    messageQueue.GetInfo(msgCount, bufferCount);
-    VerifyOrQuit(msgCount == 5, "MessageQueue::GetInfo() failed.");
+    memset(&info, 0, sizeof(info));
+    messageQueue.GetInfo(info);
+    VerifyOrQuit(info.mNumMessages == 5, "MessageQueue::GetInfo() failed.");
 
     // Remove from head
     messageQueue.Dequeue(*messages[0]);
@@ -279,8 +280,8 @@ void VerifyMessageQueueContentUsingOtApi(otMessageQueue *aQueue, int aExpectedLe
 // This test checks all the OpenThread C APIs for `otMessageQueue`
 void TestMessageQueueOtApis(void)
 {
-    otMessage *    messages[kNumTestMessages];
-    otMessage *    message;
+    otMessage     *messages[kNumTestMessages];
+    otMessage     *message;
     otMessageQueue queue, queue2;
 
     sInstance = testInitInstance();

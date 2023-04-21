@@ -60,6 +60,7 @@
 #include <openthread/logging.h>
 
 #include "common/code_utils.hpp"
+#include "lib/spinel/spinel.h"
 
 #ifdef __APPLE__
 
@@ -125,8 +126,8 @@ namespace ot {
 namespace Posix {
 
 HdlcInterface::HdlcInterface(SpinelInterface::ReceiveFrameCallback aCallback,
-                             void *                                aCallbackContext,
-                             SpinelInterface::RxFrameBuffer &      aFrameBuffer)
+                             void                                 *aCallbackContext,
+                             SpinelInterface::RxFrameBuffer       &aFrameBuffer)
     : mReceiveFrameCallback(aCallback)
     , mReceiveFrameContext(aCallbackContext)
     , mReceiveFrameBuffer(aFrameBuffer)
@@ -135,11 +136,8 @@ HdlcInterface::HdlcInterface(SpinelInterface::ReceiveFrameCallback aCallback,
     , mHdlcDecoder(aFrameBuffer, HandleHdlcFrame, this)
     , mRadioUrl(nullptr)
 {
-}
-
-void HdlcInterface::OnRcpReset(void)
-{
-    mHdlcDecoder.Reset();
+    memset(&mInterfaceMetrics, 0, sizeof(mInterfaceMetrics));
+    mInterfaceMetrics.mRcpInterfaceType = OT_POSIX_RCP_BUS_UART;
 }
 
 otError HdlcInterface::Init(const Url::Url &aRadioUrl)
@@ -175,15 +173,9 @@ exit:
     return error;
 }
 
-HdlcInterface::~HdlcInterface(void)
-{
-    Deinit();
-}
+HdlcInterface::~HdlcInterface(void) { Deinit(); }
 
-void HdlcInterface::Deinit(void)
-{
-    CloseFile();
-}
+void HdlcInterface::Deinit(void) { CloseFile(); }
 
 void HdlcInterface::Read(void)
 {
@@ -202,10 +194,7 @@ void HdlcInterface::Read(void)
     }
 }
 
-void HdlcInterface::Decode(const uint8_t *aBuffer, uint16_t aLength)
-{
-    mHdlcDecoder.Decode(aBuffer, aLength);
-}
+void HdlcInterface::Decode(const uint8_t *aBuffer, uint16_t aLength) { mHdlcDecoder.Decode(aBuffer, aLength); }
 
 otError HdlcInterface::SendFrame(const uint8_t *aFrame, uint16_t aLength)
 {
@@ -220,6 +209,12 @@ otError HdlcInterface::SendFrame(const uint8_t *aFrame, uint16_t aLength)
     error = Write(encoderBuffer.GetFrame(), encoderBuffer.GetLength());
 
 exit:
+    if ((error == OT_ERROR_NONE) && ot::Spinel::SpinelInterface::IsSpinelResetCommand(aFrame, aLength))
+    {
+        mHdlcDecoder.Reset();
+        error = ResetConnection();
+    }
+
     return error;
 }
 
@@ -252,6 +247,19 @@ otError HdlcInterface::Write(const uint8_t *aFrame, uint16_t aLength)
 
 exit:
 #endif // OPENTHREAD_POSIX_VIRTUAL_TIME
+
+    mInterfaceMetrics.mTransferredFrameCount++;
+    if (error == OT_ERROR_NONE)
+    {
+        mInterfaceMetrics.mTxFrameCount++;
+        mInterfaceMetrics.mTxFrameByteCount += aLength;
+        mInterfaceMetrics.mTransferredValidFrameCount++;
+    }
+    else
+    {
+        mInterfaceMetrics.mTransferredGarbageFrameCount++;
+    }
+
     return error;
 }
 
@@ -422,7 +430,7 @@ int HdlcInterface::OpenFile(const Url::Url &aRadioUrl)
     if (isatty(fd))
     {
         struct termios tios;
-        const char *   value;
+        const char    *value;
         speed_t        speed;
 
         int      stopBit  = 1;
@@ -615,7 +623,7 @@ int HdlcInterface::ForkPty(const Url::Url &aRadioUrl)
     if (0 == pid)
     {
         constexpr int kMaxArguments = 32;
-        char *        argv[kMaxArguments + 1];
+        char         *argv[kMaxArguments + 1];
         size_t        index = 0;
 
         argv[index++] = const_cast<char *>(aRadioUrl.GetPath());
@@ -654,12 +662,18 @@ void HdlcInterface::HandleHdlcFrame(void *aContext, otError aError)
 
 void HdlcInterface::HandleHdlcFrame(otError aError)
 {
+    mInterfaceMetrics.mTransferredFrameCount++;
+
     if (aError == OT_ERROR_NONE)
     {
+        mInterfaceMetrics.mRxFrameCount++;
+        mInterfaceMetrics.mRxFrameByteCount += mReceiveFrameBuffer.GetLength();
+        mInterfaceMetrics.mTransferredValidFrameCount++;
         mReceiveFrameCallback(mReceiveFrameContext);
     }
     else
     {
+        mInterfaceMetrics.mTransferredGarbageFrameCount++;
         mReceiveFrameBuffer.DiscardFrame();
         otLogWarnPlat("Error decoding hdlc frame: %s", otThreadErrorToString(aError));
     }

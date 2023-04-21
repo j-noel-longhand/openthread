@@ -46,13 +46,32 @@ template <> otError Joiner::Process<Cmd("discerner")>(Arg aArgs[])
 {
     otError error = OT_ERROR_INVALID_ARGS;
 
+    /**
+     * @cli joiner discerner
+     * @code
+     * joiner discerner
+     * 0xabc/12
+     * Done
+     * @endcode
+     * @par api_copy
+     * #otJoinerGetDiscerner
+     */
     if (aArgs[0].IsEmpty())
     {
         const otJoinerDiscerner *discerner = otJoinerGetDiscerner(GetInstancePtr());
 
         VerifyOrExit(discerner != nullptr, error = OT_ERROR_NOT_FOUND);
 
-        OutputLine("0x%llx/%u", static_cast<unsigned long long>(discerner->mValue), discerner->mLength);
+        if (discerner->mValue <= 0xffffffff)
+        {
+            OutputLine("0x%lx/%u", static_cast<unsigned long>(discerner->mValue & 0xffffffff), discerner->mLength);
+        }
+        else
+        {
+            OutputLine("0x%lx%08lx/%u", static_cast<unsigned long>(discerner->mValue >> 32),
+                       static_cast<unsigned long>(discerner->mValue & 0xffffffff), discerner->mLength);
+        }
+
         error = OT_ERROR_NONE;
     }
     else
@@ -61,10 +80,31 @@ template <> otError Joiner::Process<Cmd("discerner")>(Arg aArgs[])
 
         memset(&discerner, 0, sizeof(discerner));
 
+        /**
+         * @cli joiner discerner clear
+         * @code
+         * joiner discerner clear
+         * Done
+         * @endcode
+         * @par
+         * Clear the %Joiner discerner.
+         */
         if (aArgs[0] == "clear")
         {
             error = otJoinerSetDiscerner(GetInstancePtr(), nullptr);
         }
+        /**
+         * @cli joiner discerner (set)
+         * @code
+         * joiner discerner 0xabc/12
+         * Done
+         * @endcode
+         * @cparam joiner discerner @ca{discerner}
+         * *   Use `{number}/{length}` to set the `discerner`.
+         * *   `joiner discerner clear` sets `aDiscerner` to `nullptr`.
+         * @par api_copy
+         * #otJoinerSetDiscerner
+         */
         else
         {
             VerifyOrExit(aArgs[1].IsEmpty());
@@ -77,6 +117,16 @@ exit:
     return error;
 }
 
+/**
+ * @cli joiner id
+ * @code
+ * joiner id
+ * d65e64fa83f81cf7
+ * Done
+ * @endcode
+ * @par api_copy
+ * #otJoinerGetId
+ */
 template <> otError Joiner::Process<Cmd("id")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -86,6 +136,20 @@ template <> otError Joiner::Process<Cmd("id")>(Arg aArgs[])
     return OT_ERROR_NONE;
 }
 
+/**
+ * @cli joiner start
+ * @code
+ * joiner start J01NM3
+ * Done
+ * @endcode
+ * @cparam joiner start @ca{joining-device-credential} [@ca{provisioning-url}]
+ * *   `joining-device-credential`: %Joiner Passphrase. Must be a string of all uppercase alphanumeric
+ *     characters (0-9 and A-Y, excluding I, O, Q, and Z for readability), with a length between 6 and
+ *     32 characters.
+ * *   `provisioning-url`: Provisioning URL for the %Joiner (optional).
+ * @par api_copy
+ * #otJoinerStart
+ */
 template <> otError Joiner::Process<Cmd("start")>(Arg aArgs[])
 {
     otError error;
@@ -105,6 +169,15 @@ exit:
     return error;
 }
 
+/**
+ * @cli joiner stop
+ * @code
+ * joiner stop
+ * Done
+ * @endcode
+ * @par api_copy
+ * #otJoinerStop
+ */
 template <> otError Joiner::Process<Cmd("stop")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -114,6 +187,24 @@ template <> otError Joiner::Process<Cmd("stop")>(Arg aArgs[])
     return OT_ERROR_NONE;
 }
 
+/**
+ * @cli joiner state
+ * @code
+ * joiner state
+ * Idle
+ * Done
+ * @endcode
+ * @par api_copy
+ * #otJoinerGetState
+ * @par
+ * Returns one of the following states:
+ * *   `Idle`
+ * *   `Discover`
+ * *   `Connecting`
+ * *   `Connected`
+ * *   `Entrust`
+ * *   `Joined`
+ */
 template <> otError Joiner::Process<Cmd("state")>(Arg aArgs[])
 {
     OT_UNUSED_VARIABLE(aArgs);
@@ -141,6 +232,20 @@ otError Joiner::Process(Arg aArgs[])
     otError        error = OT_ERROR_INVALID_COMMAND;
     const Command *command;
 
+    /**
+     * @cli joiner help
+     * @code
+     * joiner help
+     * help
+     * id
+     * start
+     * state
+     * stop
+     * Done
+     * @endcode
+     * @par
+     * Print the `joiner` help menu.
+     */
     if (aArgs[0].IsEmpty() || (aArgs[0] == "help"))
     {
         OutputCommandTable(kCommands);
@@ -156,10 +261,7 @@ exit:
     return error;
 }
 
-void Joiner::HandleCallback(otError aError, void *aContext)
-{
-    static_cast<Joiner *>(aContext)->HandleCallback(aError);
-}
+void Joiner::HandleCallback(otError aError, void *aContext) { static_cast<Joiner *>(aContext)->HandleCallback(aError); }
 
 void Joiner::HandleCallback(otError aError)
 {

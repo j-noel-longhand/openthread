@@ -33,7 +33,7 @@ from collections import Counter
 from typing import Callable, List, Collection, Union, Tuple, Optional, Dict, Pattern, Any
 
 from . import connectors
-from .command_handlers import OTCommandHandler, OtCliCommandRunner, OtbrSshCommandRunner
+from .command_handlers import OTCommandHandler, OtCliCommandRunner, OtbrSshCommandRunner, OtbrAdbCommandRunner
 from .connectors import Simulator
 from .errors import UnexpectedCommandOutput, ExpectLineTimeoutError, CommandError, InvalidArgumentsError
 from .types import ChildId, Rloc16, Ip6Addr, ThreadState, PartitionId, DeviceMode, RouterId, SecurityPolicy, Ip6Prefix, \
@@ -101,6 +101,7 @@ class OTCI(object):
             try:
                 return self.__execute_command(cmd, timeout, silent, already_is_ok=already_is_ok)
             except Exception:
+                self.wait(2)
                 if i == self.__exec_command_retry:
                     raise
 
@@ -976,7 +977,7 @@ class OTCI(object):
                     info['addresses'] = list(map(Ip6Addr, v.split(', ')))
                 elif k == 'subtypes':
                     info[k] = list() if v == '(null)' else list(v.split(','))
-                elif k in ('port', 'weight', 'priority'):
+                elif k in ('port', 'weight', 'priority', 'ttl', 'lease', 'key-lease'):
                     info[k] = int(v)
                 elif k in ('host',):
                     info[k] = v
@@ -1569,7 +1570,16 @@ class OTCI(object):
                 routes_output.append(line)
 
         netdata['routes'] = self.__parse_routes(routes_output)
-        netdata['services'] = self.__parse_services(output)
+
+        services_output = []
+        while True:
+            line = output.pop(0)
+            if line == 'Contexts:':
+                break
+            else:
+                services_output.append(line)
+
+        netdata['services'] = self.__parse_services(services_output)
 
         return netdata
 
@@ -1621,9 +1631,9 @@ class OTCI(object):
         routes = []
         for line in output:
             line = line.split()
-            if line[1] == 's':
-                prefix, _, prf, rloc16 = line
-                stable = True
+            if len(line) == 4:
+                prefix, flags, prf, rloc16 = line
+                stable = 's' in flags
             else:
                 prefix, prf, rloc16 = line
                 stable = False
@@ -1717,7 +1727,7 @@ class OTCI(object):
         # Network Name: OpenThread-7caa
         # PAN ID: 0x7caa
         # PSKc: 167d89fd169e439ca0b8266de248090f
-        # Security Policy: 0, onrcb
+        # Security Policy: 0, onrc
 
         dataset = {}
 
@@ -2483,6 +2493,11 @@ def connect_ncp_sim(executable: str, nodeid: int, simulator: Optional[Simulator]
 
 def connect_otbr_ssh(host: str, port: int = 22, username='pi', password='raspberry', sudo=True):
     cmd_handler = OtbrSshCommandRunner(host, port, username, password, sudo=sudo)
+    return OTCI(cmd_handler)
+
+
+def connect_otbr_adb(host: str, port: int = 5555):
+    cmd_handler = OtbrAdbCommandRunner(host, port)
     return OTCI(cmd_handler)
 
 
