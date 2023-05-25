@@ -1,5 +1,6 @@
+#!/bin/bash
 #
-#  Copyright (c) 2016-2017, The OpenThread Authors.
+#  Copyright (c) 2023, The OpenThread Authors.
 #  All rights reserved.
 #
 #  Redistribution and use in source and binary forms, with or without
@@ -26,26 +27,44 @@
 #  POSSIBILITY OF SUCH DAMAGE.
 #
 
-include $(abs_top_nlbuild_autotools_dir)/automake/pre.am
+#
+# The script to correct or check the code spell of OpenThread.
+#
+# Correct wrong spelling:
+#     script/code-spell
+#
+# Check only:
+#
+#     script/code-spell check
 
-# Always package (e.g. for 'make dist') these subdirectories.
+set -euxo pipefail
 
-DIST_SUBDIRS                            = \
-    thread-cert                           \
-    $(NULL)
+OT_SPELL_CHECK_IGNORE_CONFIG_FILE='.code-spell-ignore'
+readonly OT_SPELL_CHECK_IGNORE_CONFIG_FILE
 
-# Always build (e.g. for 'make all') these subdirectories.
+OT_SPELL_CHECK_DIRS=(
+    'doc'
+    'etc'
+    'examples'
+    'include'
+    'script'
+    'src'
+    'tests'
+    'tools'
+)
+readonly OT_SPELL_CHECK_DIRS
 
-SUBDIRS                                 = \
-    $(NULL)
+main()
+{
+    if [ $# == 0 ]; then
+        codespell "${OT_SPELL_CHECK_DIRS[@]}" -w --ignore-words="${OT_SPELL_CHECK_IGNORE_CONFIG_FILE}"
+    elif [ "$1" == 'check' ]; then
+        codespell "${OT_SPELL_CHECK_DIRS[@]}" --ignore-words="${OT_SPELL_CHECK_IGNORE_CONFIG_FILE}"
+    else
+        echo >&2 "Unsupported option: $1. Supported: check"
+        # 128 for Invalid arguments
+        exit 128
+    fi
+}
 
-if OPENTHREAD_POSIX
-if OPENTHREAD_ENABLE_CLI
-SUBDIRS                                += \
-    thread-cert                           \
-    $(NULL)
-endif
-endif
-
-include $(abs_top_nlbuild_autotools_dir)/automake/post.am
-
+main "$@"

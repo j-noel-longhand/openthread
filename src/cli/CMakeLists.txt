@@ -38,6 +38,7 @@ set(COMMON_SOURCES
     cli_coap_secure.cpp
     cli_commissioner.cpp
     cli_dataset.cpp
+    cli_dns.cpp
     cli_history.cpp
     cli_joiner.cpp
     cli_network_data.cpp
@@ -47,6 +48,13 @@ set(COMMON_SOURCES
     cli_tcp.cpp
     cli_udp.cpp
 )
+
+set(OT_CLI_VENDOR_EXTENSION "" CACHE STRING "Path to CMake file to define and link cli vendor extension")
+if(OT_CLI_VENDOR_EXTENSION)
+    set(OT_CLI_VENDOR_TARGET "" CACHE STRING "Name of vendor extension CMake target to link with cli app")
+    include(${OT_CLI_VENDOR_EXTENSION})
+    target_compile_definitions(ot-config INTERFACE "OPENTHREAD_CONFIG_CLI_VENDOR_COMMANDS_ENABLE=1")
+endif()
 
 if(OT_FTD)
     include(ftd.cmake)

@@ -59,6 +59,8 @@ class BorderAgent : public InstanceLocator, private NonCopyable
     friend class Tmf::SecureAgent;
 
 public:
+    typedef otBorderAgentId Id; ///< Border Agent ID.
+
     /**
      * This enumeration defines the Border Agent state.
      *
@@ -77,6 +79,38 @@ public:
      *
      */
     explicit BorderAgent(Instance &aInstance);
+
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ID_ENABLE
+    /**
+     * Gets the randomly generated Border Agent ID.
+     *
+     * The ID is saved in persistent storage and survives reboots. The typical use case of the ID is to
+     * be published in the MeshCoP mDNS service as the `id` TXT value for the client to identify this
+     * Border Router/Agent device.
+     *
+     * @param[out] aId  Reference to return the Border Agent ID.
+     *
+     * @retval kErrorNone  If successfully retrieved the Border Agent ID.
+     * @retval ...         If failed to retrieve the Border Agent ID.
+     *
+     */
+    Error GetId(Id &aId);
+
+    /**
+     * Sets the Border Agent ID.
+     *
+     * The Border Agent ID will be saved in persistent storage and survive reboots. It's required
+     * to set the ID only once after factory reset. If the ID has never been set by calling this
+     * method, a random ID will be generated and returned when `GetId()` is called.
+     *
+     * @param[out] aId  specifies the Border Agent ID.
+     *
+     * @retval kErrorNone  If successfully set the Border Agent ID.
+     * @retval ...         If failed to set the Border Agent ID.
+     *
+     */
+    Error SetId(const Id &aId);
+#endif
 
     /**
      * This method gets the UDP port of this service.
@@ -178,6 +212,10 @@ private:
     TimeoutTimer mTimer;
     State        mState;
     uint16_t     mUdpProxyPort;
+#if OPENTHREAD_CONFIG_BORDER_AGENT_ID_ENABLE
+    Id   mId;
+    bool mIdInitialized;
+#endif
 };
 
 DeclareTmfHandler(BorderAgent, kUriRelayRx);
@@ -195,6 +233,7 @@ DeclareTmfHandler(BorderAgent, kUriProxyTx);
 } // namespace MeshCoP
 
 DefineMapEnum(otBorderAgentState, MeshCoP::BorderAgent::State);
+DefineCoreType(otBorderAgentId, MeshCoP::BorderAgent::Id);
 
 } // namespace ot
 

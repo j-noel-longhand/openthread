@@ -208,6 +208,17 @@ public:
 #endif
 
     /**
+     * Gets the instance identifier.
+     *
+     * The instance identifier is set to a random value when the instance is constructed, and then its value will not
+     * change after initialization.
+     *
+     * @returns The instance identifier.
+     *
+     */
+    uint32_t GetId(void) const { return mId; }
+
+    /**
      * This method indicates whether or not the instance is valid/initialized and not yet finalized.
      *
      * @returns TRUE if the instance is valid/initialized, FALSE otherwise.
@@ -563,8 +574,12 @@ private:
     TimeSync mTimeSync;
 #endif
 
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE || OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
-    LinkMetrics::LinkMetrics mLinkMetrics;
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
+    LinkMetrics::Initiator mInitiator;
+#endif
+
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
+    LinkMetrics::Subject mSubject;
 #endif
 
 #if OPENTHREAD_CONFIG_COAP_API_ENABLE
@@ -641,6 +656,8 @@ private:
 #if OPENTHREAD_CONFIG_REFERENCE_DEVICE_ENABLE && (OPENTHREAD_FTD || OPENTHREAD_MTD)
     static bool sDnsNameCompressionEnabled;
 #endif
+
+    uint32_t mId;
 };
 
 DefineCoreType(otInstance, Instance);
@@ -930,8 +947,12 @@ template <> inline MlrManager &Instance::Get(void) { return mMlrManager; }
 template <> inline DuaManager &Instance::Get(void) { return mDuaManager; }
 #endif
 
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE || OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
-template <> inline LinkMetrics::LinkMetrics &Instance::Get(void) { return mLinkMetrics; }
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
+template <> inline LinkMetrics::Initiator &Instance::Get(void) { return mInitiator; }
+#endif
+
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
+template <> inline LinkMetrics::Subject &Instance::Get(void) { return mSubject; }
 #endif
 
 #endif // (OPENTHREAD_CONFIG_THREAD_VERSION >= OT_THREAD_VERSION_1_2)

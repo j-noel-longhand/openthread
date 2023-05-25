@@ -136,6 +136,26 @@ public:
     explicit Ip6(Instance &aInstance);
 
     /**
+     * This method allocates a new message buffer from the buffer pool with default settings (link security
+     * enabled and `kPriorityMedium`).
+     *
+     * @returns A pointer to the message or `nullptr` if insufficient message buffers are available.
+     *
+     */
+    Message *NewMessage(void);
+
+    /**
+     * This method allocates a new message buffer from the buffer pool with default settings (link security
+     * enabled and `kPriorityMedium`).
+     *
+     * @param[in]  aReserved  The number of header bytes to reserve following the IPv6 header.
+     *
+     * @returns A pointer to the message or `nullptr` if insufficient message buffers are available.
+     *
+     */
+    Message *NewMessage(uint16_t aReserved);
+
+    /**
      * This method allocates a new message buffer from the buffer pool.
      *
      * @param[in]  aReserved  The number of header bytes to reserve following the IPv6 header.
@@ -144,34 +164,23 @@ public:
      * @returns A pointer to the message or `nullptr` if insufficient message buffers are available.
      *
      */
-    Message *NewMessage(uint16_t aReserved, const Message::Settings &aSettings = Message::Settings::GetDefault());
+    Message *NewMessage(uint16_t aReserved, const Message::Settings &aSettings);
 
     /**
      * This method allocates a new message buffer from the buffer pool and writes the IPv6 datagram to the message.
+     *
+     * The message priority is always determined from IPv6 message itself (@p aData) and the priority included in
+     * @p aSetting is ignored.
      *
      * @param[in]  aData        A pointer to the IPv6 datagram buffer.
      * @param[in]  aDataLength  The size of the IPV6 datagram buffer pointed by @p aData.
      * @param[in]  aSettings    The message settings.
      *
      * @returns A pointer to the message or `nullptr` if malformed IPv6 header or insufficient message buffers are
-     * available.
+     *          available.
      *
      */
-    Message *NewMessage(const uint8_t *aData, uint16_t aDataLength, const Message::Settings &aSettings);
-
-    /**
-     * This method allocates a new message buffer from the buffer pool and writes the IPv6 datagram to the message.
-     *
-     * @note The link layer security is enabled and the message priority is obtained from IPv6 message itself.
-     *
-     * @param[in]  aData        A pointer to the IPv6 datagram buffer.
-     * @param[in]  aDataLength  The size of the IPV6 datagram buffer pointed by @p aData.
-     *
-     * @returns A pointer to the message or `nullptr` if malformed IPv6 header or insufficient message buffers are
-     * available.
-     *
-     */
-    Message *NewMessage(const uint8_t *aData, uint16_t aDataLength);
+    Message *NewMessageFromData(const uint8_t *aData, uint16_t aDataLength, const Message::Settings &aSettings);
 
     /**
      * This method converts the IPv6 DSCP value to message priority level.
@@ -375,7 +384,6 @@ private:
     void HandleSendQueue(void);
 
     static uint8_t PriorityToDscp(Message::Priority aPriority);
-    static Error   GetDatagramPriority(const uint8_t *aData, uint16_t aDataLen, Message::Priority &aPriority);
 
     void  EnqueueDatagram(Message &aMessage);
     Error PassToHost(Message           &aMessage,

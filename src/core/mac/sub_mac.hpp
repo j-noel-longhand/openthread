@@ -478,6 +478,17 @@ public:
     const KeyMaterial &GetNextMacKey(void) const { return mNextKey; }
 
     /**
+     * This method clears the stored MAC keys.
+     *
+     */
+    void ClearMacKeys(void)
+    {
+        mPrevKey.Clear();
+        mCurrKey.Clear();
+        mNextKey.Clear();
+    }
+
+    /**
      * This method returns the current MAC frame counter value.
      *
      * @returns The current MAC frame counter value.
@@ -562,9 +573,9 @@ private:
     };
 
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
-    // CSL receive window for the longest possible frame and
-    // ack duration.
-    static constexpr uint32_t kMinCslWindow = OPENTHREAD_CONFIG_CSL_MIN_RECEIVE_ON;
+    // Radio on times needed before and after MHR time for proper frame detection
+    static constexpr uint32_t kMinReceiveOnAhead = OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AHEAD;
+    static constexpr uint32_t kMinReceiveOnAfter = OPENTHREAD_CONFIG_MIN_RECEIVE_ON_AFTER;
 
     // CSL receivers would wake up `kCslReceiveTimeAhead` earlier
     // than expected sample window. The value is in usec.

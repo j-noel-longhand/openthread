@@ -587,6 +587,12 @@ public:
      */
     bool IsEnabled(void) const { return mEnabled; }
 
+    /**
+     * This method clears the Mode2Key stored in PSA ITS.
+     *
+     */
+    void ClearMode2Key(void) { mMode2KeyMaterial.Clear(); }
+
 #if OPENTHREAD_CONFIG_MAC_CSL_RECEIVER_ENABLE
     /**
      * This method gets the CSL channel.
@@ -789,7 +795,7 @@ private:
 #if OPENTHREAD_FTD && OPENTHREAD_CONFIG_MAC_CSL_TRANSMITTER_ENABLE
     void ProcessCsl(const RxFrame &aFrame, const Address &aSrcAddr);
 #endif
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
     void ProcessEnhAckProbing(const RxFrame &aFrame, const Neighbor &aNeighbor);
 #endif
     static const char *OperationToString(Operation aOperation);

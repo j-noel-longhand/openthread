@@ -73,6 +73,7 @@ const otMeshLocalPrefix Mle::sMeshLocalPrefixInit = {
 Mle::Mle(Instance &aInstance)
     : InstanceLocator(aInstance)
     , mRetrieveNewNetworkData(false)
+    , mRequestRouteTlv(false)
     , mRole(kRoleDisabled)
     , mNeighborTable(aInstance)
     , mDeviceMode(DeviceMode::kModeRxOnWhenIdle)
@@ -257,6 +258,14 @@ exit:
         mDetachGracefullyCallback.Clear();
         callbackCopy.Invoke();
     }
+}
+
+void Mle::ResetCounters(void)
+{
+    memset(&mCounters, 0, sizeof(mCounters));
+#if OPENTHREAD_CONFIG_UPTIME_ENABLE
+    mLastUpdatedTimestamp = Get<Uptime>().GetUptime();
+#endif
 }
 
 #if OPENTHREAD_CONFIG_UPTIME_ENABLE
@@ -1833,12 +1842,35 @@ exit:
     return error;
 }
 
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE || OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
-Error Mle::SendDataRequest(const Ip6::Address                        &aDestination,
-                           const uint8_t                             *aTlvs,
-                           uint8_t                                    aTlvsLength,
-                           uint16_t                                   aDelay,
-                           const LinkMetrics::LinkMetrics::QueryInfo *aQueryInfo)
+Error Mle::SendDataRequest(const Ip6::Address &aDestination)
+{
+    return SendDataRequestAfterDelay(aDestination, /* aDelay */ 0);
+}
+
+Error Mle::SendDataRequestAfterDelay(const Ip6::Address &aDestination, uint16_t aDelay)
+{
+    static const uint8_t kTlvs[] = {Tlv::kNetworkData, Tlv::kRoute};
+
+    // Based on `mRequestRouteTlv` include both Network Data and Route
+    // TLVs or only Network Data TLV.
+
+    return SendDataRequest(aDestination, kTlvs, mRequestRouteTlv ? 2 : 1, aDelay);
+}
+
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
+Error Mle::SendDataRequestForLinkMetricsReport(const Ip6::Address                      &aDestination,
+                                               const LinkMetrics::Initiator::QueryInfo &aQueryInfo)
+{
+    static const uint8_t kTlvs[] = {Tlv::kLinkMetricsReport};
+
+    return SendDataRequest(aDestination, kTlvs, sizeof(kTlvs), /* aDelay */ 0, &aQueryInfo);
+}
+
+Error Mle::SendDataRequest(const Ip6::Address                      &aDestination,
+                           const uint8_t                           *aTlvs,
+                           uint8_t                                  aTlvsLength,
+                           uint16_t                                 aDelay,
+                           const LinkMetrics::Initiator::QueryInfo *aQueryInfo)
 #else
 Error Mle::SendDataRequest(const Ip6::Address &aDestination, const uint8_t *aTlvs, uint8_t aTlvsLength, uint16_t aDelay)
 #endif
@@ -1851,10 +1883,10 @@ Error Mle::SendDataRequest(const Ip6::Address &aDestination, const uint8_t *aTlv
     VerifyOrExit((message = NewMleMessage(kCommandDataRequest)) != nullptr, error = kErrorNoBufs);
     SuccessOrExit(error = message->AppendTlvRequestTlv(aTlvs, aTlvsLength));
 
-#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE || OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
+#if OPENTHREAD_CONFIG_MLE_LINK_METRICS_INITIATOR_ENABLE
     if (aQueryInfo != nullptr)
     {
-        SuccessOrExit(error = Get<LinkMetrics::LinkMetrics>().AppendLinkMetricsQueryTlv(*message, *aQueryInfo));
+        SuccessOrExit(error = Get<LinkMetrics::Initiator>().AppendLinkMetricsQueryTlv(*message, *aQueryInfo));
     }
 #endif
 
@@ -1979,15 +2011,13 @@ void Mle::HandleMessageTransmissionTimer(void)
     case kChildUpdateRequestNone:
         if (mDataRequestState == kDataRequestActive)
         {
-            static const uint8_t kTlvs[] = {Tlv::kNetworkData};
-
             Ip6::Address destination;
 
             VerifyOrExit(mDataRequestAttempts < kMaxChildKeepAliveAttempts, IgnoreError(BecomeDetached()));
 
             destination.SetToLinkLocalAddress(mParent.GetExtAddress());
 
-            if (SendDataRequest(destination, kTlvs) == kErrorNone)
+            if (SendDataRequest(destination) == kErrorNone)
             {
                 mDataRequestAttempts++;
             }
@@ -2733,8 +2763,6 @@ exit:
 
 void Mle::HandleAdvertisement(RxInfo &aRxInfo)
 {
-    static const uint8_t kTlvs[] = {Tlv::kNetworkData};
-
     Error      error = kErrorNone;
     uint16_t   sourceAddress;
     LeaderData leaderData;
@@ -2788,7 +2816,7 @@ void Mle::HandleAdvertisement(RxInfo &aRxInfo)
     if (mRetrieveNewNetworkData || IsNetworkDataNewer(leaderData))
     {
         delay = Random::NonCrypto::GetUint16InRange(0, kMleMaxResponseDelay);
-        IgnoreError(SendDataRequest(aRxInfo.mMessageInfo.GetPeerAddr(), kTlvs, delay));
+        IgnoreError(SendDataRequestAfterDelay(aRxInfo.mMessageInfo.GetPeerAddr(), delay));
     }
 
     aRxInfo.mClass = RxInfo::kPeerMessage;
@@ -2812,10 +2840,14 @@ void Mle::HandleDataResponse(RxInfo &aRxInfo)
 
         if (Tlv::FindTlvValueOffset(aRxInfo.mMessage, Tlv::kLinkMetricsReport, offset, length) == kErrorNone)
         {
-            Get<LinkMetrics::LinkMetrics>().HandleReport(aRxInfo.mMessage, offset, length,
-                                                         aRxInfo.mMessageInfo.GetPeerAddr());
+            Get<LinkMetrics::Initiator>().HandleReport(aRxInfo.mMessage, offset, length,
+                                                       aRxInfo.mMessageInfo.GetPeerAddr());
         }
     }
+#endif
+
+#if OPENTHREAD_FTD
+    SuccessOrExit(error = Get<MleRouter>().ReadAndProcessRouteTlvOnFed(aRxInfo, mParent.GetRouterId()));
 #endif
 
     error = HandleLeaderData(aRxInfo);
@@ -2981,8 +3013,6 @@ exit:
 
     if (dataRequest)
     {
-        static const uint8_t kTlvs[] = {Tlv::kNetworkData};
-
         uint16_t delay;
 
         if (aRxInfo.mMessageInfo.GetSockAddr().IsMulticast())
@@ -2997,7 +3027,7 @@ exit:
             delay = 10;
         }
 
-        IgnoreError(SendDataRequest(aRxInfo.mMessageInfo.GetPeerAddr(), kTlvs, delay));
+        IgnoreError(SendDataRequestAfterDelay(aRxInfo.mMessageInfo.GetPeerAddr(), delay));
     }
     else if (error == kErrorNone)
     {
@@ -3153,7 +3183,7 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
     cslAccuracy.Init();
 #endif
 
-    // Share data with application, if requested.
+#if OPENTHREAD_CONFIG_MLE_PARENT_RESPONSE_CALLBACK_API_ENABLE
     if (mParentResponseCallback.IsSet())
     {
         otThreadParentResponseInfo parentinfo;
@@ -3169,6 +3199,7 @@ void Mle::HandleParentResponse(RxInfo &aRxInfo)
 
         mParentResponseCallback.Invoke(&parentinfo);
     }
+#endif
 
     aRxInfo.mClass = RxInfo::kAuthoritativeMessage;
 
@@ -3575,6 +3606,13 @@ void Mle::HandleChildUpdateResponse(RxInfo &aRxInfo)
 
         mRetrieveNewNetworkData = true;
 
+#if OPENTHREAD_FTD
+        if (IsFullThreadDevice())
+        {
+            mRequestRouteTlv = true;
+        }
+#endif
+
         OT_FALL_THROUGH;
 
     case kRoleChild:
@@ -3741,7 +3779,7 @@ void Mle::HandleLinkMetricsManagementRequest(RxInfo &aRxInfo)
     VerifyOrExit(aRxInfo.mNeighbor != nullptr, error = kErrorInvalidState);
 
     SuccessOrExit(
-        error = Get<LinkMetrics::LinkMetrics>().HandleManagementRequest(aRxInfo.mMessage, *aRxInfo.mNeighbor, status));
+        error = Get<LinkMetrics::Subject>().HandleManagementRequest(aRxInfo.mMessage, *aRxInfo.mNeighbor, status));
 
     error = SendLinkMetricsManagementResponse(aRxInfo.mMessageInfo.GetPeerAddr(), status);
 
@@ -3763,7 +3801,7 @@ void Mle::HandleLinkMetricsManagementResponse(RxInfo &aRxInfo)
     VerifyOrExit(aRxInfo.mNeighbor != nullptr, error = kErrorInvalidState);
 
     error =
-        Get<LinkMetrics::LinkMetrics>().HandleManagementResponse(aRxInfo.mMessage, aRxInfo.mMessageInfo.GetPeerAddr());
+        Get<LinkMetrics::Initiator>().HandleManagementResponse(aRxInfo.mMessage, aRxInfo.mMessageInfo.GetPeerAddr());
 
     aRxInfo.mClass = RxInfo::kPeerMessage;
 
@@ -3780,7 +3818,7 @@ void Mle::HandleLinkProbe(RxInfo &aRxInfo)
 
     Log(kMessageReceive, kTypeLinkProbe, aRxInfo.mMessageInfo.GetPeerAddr());
 
-    SuccessOrExit(error = Get<LinkMetrics::LinkMetrics>().HandleLinkProbe(aRxInfo.mMessage, seriesId));
+    SuccessOrExit(error = Get<LinkMetrics::Subject>().HandleLinkProbe(aRxInfo.mMessage, seriesId));
     aRxInfo.mNeighbor->AggregateLinkMetrics(seriesId, LinkMetrics::SeriesInfo::kSeriesTypeLinkProbe,
                                             aRxInfo.mMessage.GetAverageLqi(), aRxInfo.mMessage.GetAverageRss());
 

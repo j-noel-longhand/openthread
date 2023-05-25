@@ -56,6 +56,7 @@ Done
 - [fem](#fem)
 - [history](README_HISTORY.md)
 - [ifconfig](#ifconfig)
+- [instanceid](#instanceid)
 - [ipaddr](#ipaddr)
 - [ipmaddr](#ipmaddr)
 - [joiner](README_JOINER.md)
@@ -121,6 +122,7 @@ Done
 - [udp](README_UDP.md)
 - [unsecureport](#unsecureport-add-port)
 - [uptime](#uptime)
+- [vendor](#vendor-name)
 - [version](#version)
 
 ## OpenThread Command Details
@@ -1268,6 +1270,14 @@ The parameters after `service-name` are optional. Any unspecified (or zero) valu
 
 > Note: The DNS server IP can be an IPv4 address, which will be synthesized to an IPv6 address using the preferred NAT64 prefix from the network data. The command will return `InvalidState` when the DNS server IP is an IPv4 address but the preferred NAT64 prefix is unavailable.
 
+### dns servicehost \<service-instance-label\> \<service-name\> \[DNS server IP\] \[DNS server port\] \[response timeout (ms)\] \[max tx attempts\] \[recursion desired (boolean)\]
+
+Send a service instance resolution DNS query for a given service instance with a potential follow-up address resolution for the host name discovered for the service instance (if the server/resolver does not provide AAAA/A records for the host name in the response to SRV query).
+
+Service instance label is provided first, followed by the service name (note that service instance label can contain dot '.' character).
+
+The parameters after `service-name` are optional. Any unspecified (or zero) value for these optional parameters is replaced by the value from the current default config (`dns config`).
+
 ### dns compression \[enable|disable\]
 
 Enable/Disable the "DNS name compression" mode.
@@ -1316,7 +1326,7 @@ Done
 
 ### dua iid
 
-Get the Interface Identifier mannually specified for Thread Domain Unicast Address on Thread 1.2 device.
+Get the Interface Identifier manually specified for Thread Domain Unicast Address on Thread 1.2 device.
 
 ```bash
 > dua iid
@@ -1326,7 +1336,7 @@ Done
 
 ### dua iid \<iid\>
 
-Set the Interface Identifier mannually specified for Thread Domain Unicast Address on Thread 1.2 device.
+Set the Interface Identifier manually specified for Thread Domain Unicast Address on Thread 1.2 device.
 
 ```bash
 > dua iid 0004000300020001
@@ -1335,7 +1345,7 @@ Done
 
 ### dua iid clear
 
-Clear the Interface Identifier mannually specified for Thread Domain Unicast Address on Thread 1.2 device.
+Clear the Interface Identifier manually specified for Thread Domain Unicast Address on Thread 1.2 device.
 
 ```bash
 > dua iid clear
@@ -1482,6 +1492,16 @@ Bring down the IPv6 interface.
 Done
 ```
 
+### instanceid
+
+Show OpenThread instance identifier.
+
+```bash
+> instanceid
+468697314
+Done
+```
+
 ### ipaddr
 
 List all IPv6 addresses assigned to the Thread interface.
@@ -1494,7 +1514,7 @@ fe80:0:0:0:f3d9:2a82:c8d8:fe43
 Done
 ```
 
-Use `-v` to get more verbose informations about the address.
+Use `-v` to get more verbose information about the address.
 
 ```bash
 > ipaddr -v
@@ -1670,7 +1690,7 @@ Done
 
 ### keysequence guardtime \<guardtime\>
 
-Set Thread Key Switch Guard Time (in hours) 0 means Thread Key Switch imediately if key index match
+Set Thread Key Switch Guard Time (in hours) 0 means Thread Key Switch immediately if key index match
 
 ```bash
 > keysequence guardtime 0
@@ -2193,14 +2213,14 @@ Gets the state of NAT64 functions.
 Possible results for prefix manager are (`OPENTHREAD_CONFIG_NAT64_BORDER_ROUTING_ENABLE` is required):
 
 - `Disabled`: NAT64 prefix manager is disabled.
-- `NotRunning`: NAT64 prefix manager is enabled, but is not running, probably bacause the routing manager is disabled.
+- `NotRunning`: NAT64 prefix manager is enabled, but is not running, probably because the routing manager is disabled.
 - `Idle`: NAT64 prefix manager is enabled and is running, but is not publishing a NAT64 prefix. Usually when there is another border router publishing a NAT64 prefix with higher priority.
 - `Active`: NAT64 prefix manager is enabled, running and publishing a NAT64 prefix.
 
 Possible results for NAT64 translator are (`OPENTHREAD_CONFIG_NAT64_TRANSLATOR_ENABLE` is required):
 
 - `Disabled`: NAT64 translator is disabled.
-- `NotRunning`: NAT64 translator is enabled, but is not translating packets, probably bacause it is not configued with a NAT64 prefix or a CIDR for NAT64.
+- `NotRunning`: NAT64 translator is enabled, but is not translating packets, probably because it is not configured with a NAT64 prefix or a CIDR for NAT64.
 - `Active`: NAT64 translator is enabled and is translating packets.
 
 `OPENTHREAD_CONFIG_NAT64_TRANSLATOR_ENABLE` or `OPENTHREAD_CONFIG_NAT64_BORDER_ROUTING_ENABLE` are required.
@@ -2299,6 +2319,43 @@ Print table of neighbors.
 |   C  | 0xcc01 |  96 |      -46 |       -46 |1|1|1| 1eb9ba8a6522636b |
 |   R  | 0xc800 |   2 |      -29 |       -29 |1|1|1| 9a91556102c39ddb |
 |   R  | 0xf000 |   3 |      -28 |       -28 |1|1|1| 0ad7ed6beaa6016d |
+Done
+```
+
+### neighbor conntime
+
+Print connection time and age of neighbors.
+
+The table provides the following info per neighbor:
+
+- RLOC16
+- Extended MAC address
+- Age (seconds since last heard from neighbor)
+- Connection time (seconds since link establishment with neighbor)
+
+Duration intervals are formatted as `<hh>:<mm>:<ss>` for hours, minutes, and seconds if the duration is less than one day. If the duration is longer than one day, the format is `<dd>d.<hh>:<mm>:<ss>`.
+
+```bash
+> neighbor conntime
+| RLOC16 | Extended MAC     | Last Heard (Age) | Connection Time  |
++--------+------------------+------------------+------------------+
+| 0x8401 | 1a28be396a14a318 |         00:00:13 |         00:07:59 |
+| 0x5c00 | 723ebf0d9eba3264 |         00:00:03 |         00:11:27 |
+| 0xe800 | ce53628a1e3f5b3c |         00:00:02 |         00:00:15 |
+Done
+```
+
+### neighbor conntime list
+
+Print connection time and age of neighbors.
+
+This command is similar to `neighbor conntime`, but it displays the information in a list format. The age and connection time are both displayed in seconds.
+
+```bash
+> neighbor conntime list
+0x8401 1a28be396a14a318 age:63 conn-time:644
+0x5c00 723ebf0d9eba3264 age:23 conn-time:852
+0xe800 ce53628a1e3f5b3c age:23 conn-time:180
 Done
 ```
 
@@ -2639,7 +2696,7 @@ Done
 
 ### prefix
 
-Get the prefix list in the local Network Data. Note: For the Thread 1.2 border router with backbone capability, the local Domain Prefix would be listed as well (with flag `D`), with preceeding `-` if backbone functionality is disabled.
+Get the prefix list in the local Network Data. Note: For the Thread 1.2 border router with backbone capability, the local Domain Prefix would be listed as well (with flag `D`), with preceding `-` if backbone functionality is disabled.
 
 ```bash
 > prefix
@@ -3360,6 +3417,57 @@ Done
 >
 ```
 
+### vendor name
+
+Get the vendor name.
+
+```bash
+> vendor name
+nest
+Done
+```
+
+Set the vendor name (requires `OPENTHREAD_CONFIG_NET_DIAG_VENDOR_INFO_SET_API_ENABLE`).
+
+```bash
+> vendor name nest
+Done
+```
+
+### vendor model
+
+Get the vendor model.
+
+```bash
+> vendor model
+Hub Max
+Done
+```
+
+Set the vendor model (requires `OPENTHREAD_CONFIG_NET_DIAG_VENDOR_INFO_SET_API_ENABLE`).
+
+```bash
+> vendor model Hub\ Max
+Done
+```
+
+### vendor swversion
+
+Get the vendor SW version.
+
+```bash
+> vendor swversion
+Marble3.5.1
+Done
+```
+
+Set the vendor SW version (requires `OPENTHREAD_CONFIG_NET_DIAG_VENDOR_INFO_SET_API_ENABLE`).
+
+```bash
+> vendor swversion Marble3.5.1
+Done
+```
+
 ### version
 
 Print the build version information.
@@ -3488,7 +3596,7 @@ Done
 
 ### macfilter addr add \<extaddr\> \[rss\]
 
-Add an IEEE 802.15.4 Extended Address to the address filter, and fixed the received singal strength for the messages from the address if rss is specified.
+Add an IEEE 802.15.4 Extended Address to the address filter, and fixed the received signal strength for the messages from the address if rss is specified.
 
 ```bash
 > macfilter addr add 0f6127e33af6b403 -95

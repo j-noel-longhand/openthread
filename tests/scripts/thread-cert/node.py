@@ -2380,6 +2380,10 @@ class NodeImpl:
         self.send_command(f'netdata publish route {prefix} {flags} {prf}')
         self._expect_done()
 
+    def netdata_publish_replace(self, old_prefix, prefix, flags='s', prf='med'):
+        self.send_command(f'netdata publish replace {old_prefix} {prefix} {flags} {prf}')
+        self._expect_done()
+
     def netdata_unpublish_prefix(self, prefix):
         self.send_command(f'netdata unpublish {prefix}')
         self._expect_done()
@@ -3169,7 +3173,7 @@ class NodeImpl:
     def _parse_linkmetrics_query_result(self, lines):
         """Parse link metrics query result"""
 
-        # Exmaple of command output:
+        # Example of command output:
         # ['Received Link Metrics Report from: fe80:0:0:0:146e:a00:0:1',
         #  '- PDU Counter: 1 (Count/Summation)',
         #  '- LQI: 0 (Exponential Moving Average)',
@@ -3639,6 +3643,30 @@ class LinuxHost():
         self.bash('ip -6 neigh list nud all dev %s | cut -d " " -f1 | sudo xargs -I{} ip -6 neigh delete {} dev %s' %
                   (self.ETH_DEV, self.ETH_DEV))
         self.bash(f'ip -6 neigh list dev {self.ETH_DEV}')
+
+    def publish_mdns_service(self, instance_name, service_type, port, host_name, txt):
+        """Publish an mDNS service on the Ethernet.
+
+        :param instance_name: the service instance name.
+        :param service_type: the service type in format of '<service_type>.<protocol>'.
+        :param port: the port the service is at.
+        :param host_name: the host name this service points to. The domain
+                          should not be included.
+        :param txt: a dictionary containing the key-value pairs of the TXT record.
+        """
+        txt_string = ' '.join([f'{key}={value}' for key, value in txt.items()])
+        self.bash(f'avahi-publish -s {instance_name}  {service_type} {port} -H {host_name}.local {txt_string} &')
+
+    def publish_mdns_host(self, hostname, addresses):
+        """Publish an mDNS host on the Ethernet
+
+        :param host_name: the host name this service points to. The domain
+                          should not be included.
+        :param addresses: a list of strings representing the addresses to
+                          be registered with the host.
+        """
+        for address in addresses:
+            self.bash(f'avahi-publish -a {hostname}.local {address} &')
 
     def browse_mdns_services(self, name, timeout=2):
         """ Browse mDNS services on the ethernet.

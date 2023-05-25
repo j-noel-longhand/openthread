@@ -1202,7 +1202,7 @@ Error Server::VerifySignature(const Dns::Ecdsa256KeyRecord &aKeyRecord,
 
     // The uncompressed (canonical) form of the signer name should be used for signature
     // verification. See https://tools.ietf.org/html/rfc2931#section-3.1 for details.
-    signerNameMessage = Get<Ip6::Udp>().NewMessage(0);
+    signerNameMessage = Get<Ip6::Udp>().NewMessage();
     VerifyOrExit(signerNameMessage != nullptr, error = kErrorNoBufs);
     SuccessOrExit(error = Dns::Name::AppendName(aSignerName, *signerNameMessage));
     sha256.Update(*signerNameMessage, signerNameMessage->GetOffset(), signerNameMessage->GetLength());
@@ -1399,7 +1399,7 @@ void Server::SendResponse(const Dns::UpdateHeader    &aHeader,
     Message          *response = nullptr;
     Dns::UpdateHeader header;
 
-    response = GetSocket().NewMessage(0);
+    response = GetSocket().NewMessage();
     VerifyOrExit(response != nullptr, error = kErrorNoBufs);
 
     header.SetMessageId(aHeader.GetMessageId());
@@ -1442,7 +1442,7 @@ void Server::SendResponse(const Dns::UpdateHeader &aHeader,
     Dns::LeaseOption  leaseOption;
     uint16_t          optionSize;
 
-    response = GetSocket().NewMessage(0);
+    response = GetSocket().NewMessage();
     VerifyOrExit(response != nullptr, error = kErrorNoBufs);
 
     header.SetMessageId(aHeader.GetMessageId());
@@ -1994,7 +1994,7 @@ Error Server::Host::ProcessTtl(uint32_t aTtl)
 {
     // This method processes the TTL value received in a resource record.
     //
-    // If no TTL value is stored, this method wil set the stored value to @p aTtl and return `kErrorNone`.
+    // If no TTL value is stored, this method will set the stored value to @p aTtl and return `kErrorNone`.
     // If a TTL value is stored and @p aTtl equals the stored value, this method returns `kErrorNone`.
     // Otherwise, this method returns `kErrorRejected`.
 

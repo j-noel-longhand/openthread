@@ -47,6 +47,7 @@
 #include "common/random.hpp"
 #include "common/serial_number.hpp"
 #include "common/timer.hpp"
+#include "common/uptime.hpp"
 #include "mac/mac_types.hpp"
 #include "net/ip6.hpp"
 #include "radio/radio.hpp"
@@ -224,7 +225,7 @@ public:
      * @param[in]  aState  The state value.
      *
      */
-    void SetState(State aState) { mState = static_cast<uint8_t>(aState); }
+    void SetState(State aState);
 
     /**
      * This method indicates whether the neighbor is in the Invalid state.
@@ -669,6 +670,16 @@ public:
      */
     uint8_t GetChallengeSize(void) const { return sizeof(mValidPending.mPending.mChallenge); }
 
+#if OPENTHREAD_CONFIG_UPTIME_ENABLE
+    /**
+     * This method returns the connection time (in seconds) of the neighbor (seconds since entering `kStateValid`).
+     *
+     * @returns The connection time (in seconds), zero if device is not currently in `kStateValid`.
+     *
+     */
+    uint32_t GetConnectionTime(void) const;
+#endif
+
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
     /**
      * This method indicates whether or not time sync feature is enabled.
@@ -840,6 +851,9 @@ private:
     // and this neighbor is the Subject.
     LinkMetrics::Metrics mEnhAckProbingMetrics;
 #endif
+#if OPENTHREAD_CONFIG_UPTIME_ENABLE
+    uint32_t mConnectionStart;
+#endif
 };
 
 #if OPENTHREAD_FTD
@@ -859,7 +873,7 @@ class Child : public Neighbor,
     class AddressIteratorBuilder;
 
 public:
-    static constexpr uint8_t kMaxRequestTlvs = 5;
+    static constexpr uint8_t kMaxRequestTlvs = 6;
 
     /**
      * This class represents diagnostic information for a Thread Child.

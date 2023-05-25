@@ -61,6 +61,7 @@
 #include "cli/cli_br.hpp"
 #include "cli/cli_commissioner.hpp"
 #include "cli/cli_dataset.hpp"
+#include "cli/cli_dns.hpp"
 #include "cli/cli_history.hpp"
 #include "cli/cli_joiner.hpp"
 #include "cli/cli_network_data.hpp"
@@ -76,6 +77,7 @@
 #include "cli/cli_coap_secure.hpp"
 #endif
 
+#include "common/array.hpp"
 #include "common/code_utils.hpp"
 #include "common/debug.hpp"
 #include "common/instance.hpp"
@@ -106,6 +108,7 @@ class Interpreter : public OutputImplementer, public Output
 #if OPENTHREAD_FTD || OPENTHREAD_MTD
     friend class Br;
     friend class Commissioner;
+    friend class Dns;
     friend class Joiner;
     friend class NetworkData;
     friend class SrpClient;
@@ -180,14 +183,16 @@ public:
     static otError ParseEnableOrDisable(const Arg &aArg, bool &aEnable);
 
     /**
-     * This method sets the user command table.
+     * This method adds commands to the user command table.
      *
      * @param[in]  aCommands  A pointer to an array with user commands.
      * @param[in]  aLength    @p aUserCommands length.
      * @param[in]  aContext   @p aUserCommands length.
      *
+     * @retval OT_ERROR_NONE    Successfully updated command table with commands from @p aCommands.
+     * @retval OT_ERROR_FAILED  No available UserCommandsEntry to register requested user commands.
      */
-    void SetUserCommands(const otCliCommand *aCommands, uint8_t aLength, void *aContext);
+    otError SetUserCommands(const otCliCommand *aCommands, uint8_t aLength, void *aContext);
 
     static constexpr uint8_t kLinkModeStringSize = sizeof("rdn"); ///< Size of string buffer for a MLE Link Mode.
 
@@ -265,10 +270,11 @@ protected:
 private:
     enum
     {
-        kIndentSize       = 4,
-        kMaxArgs          = 32,
-        kMaxAutoAddresses = 8,
-        kMaxLineLength    = OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH,
+        kIndentSize            = 4,
+        kMaxArgs               = 32,
+        kMaxAutoAddresses      = 8,
+        kMaxLineLength         = OPENTHREAD_CONFIG_CLI_MAX_LINE_LENGTH,
+        kMaxUserCommandEntries = OPENTHREAD_CONFIG_CLI_MAX_USER_CMD_ENTRIES,
     };
 
     static constexpr uint32_t kNetworkDiagnosticTimeoutMsecs = 5000;
@@ -291,8 +297,9 @@ private:
     {
         static_assert(
             TypeTraits::IsSame<ValueType, uint8_t>::kValue || TypeTraits::IsSame<ValueType, uint16_t>::kValue ||
-                TypeTraits::IsSame<ValueType, int8_t>::kValue || TypeTraits::IsSame<ValueType, int16_t>::kValue,
-            "ValueType must be an  8, 16 `int` or `uint` type");
+                TypeTraits::IsSame<ValueType, int8_t>::kValue || TypeTraits::IsSame<ValueType, int16_t>::kValue ||
+                TypeTraits::IsSame<ValueType, const char *>::kValue,
+            "ValueType must be an  8, 16 `int` or `uint` type, or a `const char *`");
 
         otError error = OT_ERROR_NONE;
 
@@ -455,21 +462,6 @@ private:
     void OutputChildTableEntry(uint8_t aIndentSize, const otNetworkDiagChildEntry &aChildEntry);
 #endif
 
-#if OPENTHREAD_CONFIG_DNS_CLIENT_ENABLE
-    otError     GetDnsConfig(Arg aArgs[], otDnsQueryConfig *&aConfig);
-    static void HandleDnsAddressResponse(otError aError, const otDnsAddressResponse *aResponse, void *aContext);
-    void        HandleDnsAddressResponse(otError aError, const otDnsAddressResponse *aResponse);
-    const char *DnsConfigServiceModeToString(otDnsServiceMode aMode) const;
-    otError     ParseDnsServiceMode(const Arg &aArg, otDnsServiceMode &aMode) const;
-#if OPENTHREAD_CONFIG_DNS_CLIENT_SERVICE_DISCOVERY_ENABLE
-    void        OutputDnsServiceInfo(uint8_t aIndentSize, const otDnsServiceInfo &aServiceInfo);
-    static void HandleDnsBrowseResponse(otError aError, const otDnsBrowseResponse *aResponse, void *aContext);
-    void        HandleDnsBrowseResponse(otError aError, const otDnsBrowseResponse *aResponse);
-    static void HandleDnsServiceResponse(otError aError, const otDnsServiceResponse *aResponse, void *aContext);
-    void        HandleDnsServiceResponse(otError aError, const otDnsServiceResponse *aResponse);
-#endif
-#endif
-
 #if OPENTHREAD_CONFIG_SNTP_CLIENT_ENABLE
     static void HandleSntpResponse(void *aContext, uint64_t aTime, otError aResult);
 #endif
@@ -531,10 +523,15 @@ private:
     static void HandleTimer(Timer &aTimer);
     void        HandleTimer(void);
 
-    const otCliCommand *mUserCommands;
-    uint8_t             mUserCommandsLength;
-    void               *mUserCommandsContext;
-    bool                mCommandIsPending;
+    struct UserCommandsEntry
+    {
+        const otCliCommand *mCommands;
+        uint8_t             mLength;
+        void               *mContext;
+    };
+
+    UserCommandsEntry mUserCommands[kMaxUserCommandEntries];
+    bool              mCommandIsPending;
 
     TimerMilliContext mTimer;
 
@@ -546,6 +543,10 @@ private:
     Dataset     mDataset;
     NetworkData mNetworkData;
     UdpExample  mUdp;
+
+#if OPENTHREAD_CLI_DNS_ENABLE
+    Dns mDns;
+#endif
 
 #if OPENTHREAD_CONFIG_BORDER_ROUTING_ENABLE
     Br mBr;
@@ -609,6 +610,8 @@ template <> inline constexpr const char *Interpreter::FormatStringFor<int8_t>(vo
 template <> inline constexpr const char *Interpreter::FormatStringFor<int16_t>(void) { return "%d"; }
 
 template <> inline constexpr const char *Interpreter::FormatStringFor<int32_t>(void) { return "%ld"; }
+
+template <> inline constexpr const char *Interpreter::FormatStringFor<const char *>(void) { return "%s"; }
 
 // Specialization of ProcessGet<> for `uint32_t` and `int32_t`
 

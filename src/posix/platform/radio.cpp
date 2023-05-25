@@ -201,6 +201,8 @@ void Radio::Init(void)
 #endif // OPENTHREAD_CONFIG_PLATFORM_RADIO_COEX_ENABLE
 }
 
+void *Radio::GetSpinelInstance(void) { return &sRadioSpinel; }
+
 } // namespace Posix
 } // namespace ot
 
@@ -733,6 +735,16 @@ otError otPlatDiagRadioTransmitCarrier(otInstance *aInstance, bool aEnable)
 
 exit:
     return error;
+}
+
+otError otPlatDiagRadioTransmitStream(otInstance *aInstance, bool aEnable)
+{
+    OT_UNUSED_VARIABLE(aInstance);
+
+    char cmd[OPENTHREAD_CONFIG_DIAG_CMD_LINE_BUFFER_SIZE];
+
+    snprintf(cmd, sizeof(cmd), "stream %s", aEnable ? "start" : "stop");
+    return sRadioSpinel.PlatDiagProcess(cmd, nullptr, 0);
 }
 
 void otPlatDiagRadioReceived(otInstance *aInstance, otRadioFrame *aFrame, otError aError)

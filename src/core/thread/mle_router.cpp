@@ -808,8 +808,6 @@ void MleRouter::HandleLinkAcceptAndRequest(RxInfo &aRxInfo)
 
 Error MleRouter::HandleLinkAccept(RxInfo &aRxInfo, bool aRequest)
 {
-    static const uint8_t kDataRequestTlvs[] = {Tlv::kNetworkData};
-
     Error           error = kErrorNone;
     Router         *router;
     Neighbor::State neighborState;
@@ -916,7 +914,7 @@ Error MleRouter::HandleLinkAccept(RxInfo &aRxInfo, bool aRequest)
 
         mLinkRequestAttempts    = 0; // completed router sync after reset, no more link request to retransmit
         mRetrieveNewNetworkData = true;
-        IgnoreError(SendDataRequest(aRxInfo.mMessageInfo.GetPeerAddr(), kDataRequestTlvs));
+        IgnoreError(SendDataRequest(aRxInfo.mMessageInfo.GetPeerAddr()));
 
 #if OPENTHREAD_CONFIG_TIME_SYNC_ENABLE
         Get<TimeSync>().HandleTimeSyncMessage(aRxInfo.mMessage);
@@ -939,7 +937,7 @@ Error MleRouter::HandleLinkAccept(RxInfo &aRxInfo, bool aRequest)
             SerialNumber::IsGreater(leaderData.GetDataVersion(NetworkData::kFullSet),
                                     Get<NetworkData::Leader>().GetVersion(NetworkData::kFullSet)))
         {
-            IgnoreError(SendDataRequest(aRxInfo.mMessageInfo.GetPeerAddr(), kDataRequestTlvs));
+            IgnoreError(SendDataRequest(aRxInfo.mMessageInfo.GetPeerAddr()));
         }
 
         // Route (optional)
@@ -1085,6 +1083,7 @@ Error MleRouter::ReadAndProcessRouteTlvOnFed(RxInfo &aRxInfo, uint8_t aParentId)
     case kErrorNone:
         SuccessOrExit(error = ProcessRouteTlv(routeTlv, aRxInfo));
         mRouterTable.UpdateRoutesOnFed(routeTlv, aParentId);
+        mRequestRouteTlv = false;
         break;
     case kErrorNotFound:
         break;
@@ -1316,6 +1315,10 @@ Error MleRouter::HandleAdvertisement(RxInfo &aRxInfo, uint16_t aSourceAddress, c
                                          DeviceMode::kModeFullNetworkData));
 
         mNeighborTable.Signal(NeighborTable::kRouterAdded, *router);
+
+        // Change the cache entries associated with the former child
+        // from using the old RLOC16 to its new RLOC16.
+        Get<AddressResolver>().ReplaceEntriesForRloc16(aRxInfo.mNeighbor->GetRloc16(), router->GetRloc16());
     }
 
     // Send unicast link request if no link to router and no unicast/multicast link request in progress
@@ -1955,7 +1958,7 @@ Error MleRouter::ProcessAddressRegistrationTlv(RxInfo &aRxInfo, Child &aChild)
         }
 
         // Clear EID-to-RLOC cache for the unicast address registered by the child.
-        Get<AddressResolver>().Remove(address);
+        Get<AddressResolver>().RemoveEntryForAddress(address);
     }
 #if OPENTHREAD_CONFIG_TMF_PROXY_DUA_ENABLE
     // Dua is removed
@@ -2000,6 +2003,7 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
     MeshCoP::Timestamp timestamp;
     bool               needsActiveDatasetTlv;
     bool               needsPendingDatasetTlv;
+    bool               needsSupervisionTlv;
     Child             *child;
     Router            *router;
     uint8_t            numTlvs;
@@ -2043,9 +2047,11 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
     SuccessOrExit(error = Tlv::Find<TimeoutTlv>(aRxInfo.mMessage, timeout));
 
     // Supervision interval
+    needsSupervisionTlv = false;
     switch (Tlv::Find<SupervisionIntervalTlv>(aRxInfo.mMessage, supervisionInterval))
     {
     case kErrorNone:
+        needsSupervisionTlv = true;
         break;
     case kErrorNotFound:
         supervisionInterval = (version <= kThreadVersion1p3) ? kChildSupervisionDefaultIntervalForOlderVersion : 0;
@@ -2093,6 +2099,11 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
     }
 
     if (needsPendingDatasetTlv)
+    {
+        numTlvs++;
+    }
+
+    if (needsSupervisionTlv)
     {
         numTlvs++;
     }
@@ -2152,6 +2163,11 @@ void MleRouter::HandleChildIdRequest(RxInfo &aRxInfo)
     if (needsPendingDatasetTlv)
     {
         child->SetRequestTlv(numTlvs++, Tlv::kPendingDataset);
+    }
+
+    if (needsSupervisionTlv)
+    {
+        child->SetRequestTlv(numTlvs++, Tlv::kSupervisionInterval);
     }
 
     aRxInfo.mClass = RxInfo::kAuthoritativeMessage;
@@ -2921,6 +2937,10 @@ Error MleRouter::SendChildIdResponse(Child &aChild)
             SuccessOrExit(error = message->AppendPendingDatasetTlv());
             break;
 
+        case Tlv::kSupervisionInterval:
+            SuccessOrExit(error = message->AppendSupervisionIntervalTlv(aChild.GetSupervisionInterval()));
+            break;
+
         default:
             break;
         }
@@ -3155,12 +3175,16 @@ void MleRouter::SendDataResponse(const Ip6::Address &aDestination,
             SuccessOrExit(error = message->AppendPendingDatasetTlv());
             break;
 
+        case Tlv::kRoute:
+            SuccessOrExit(error = message->AppendRouteTlv());
+            break;
+
 #if OPENTHREAD_CONFIG_MLE_LINK_METRICS_SUBJECT_ENABLE
         case Tlv::kLinkMetricsReport:
             OT_ASSERT(aRequestMessage != nullptr);
             neighbor = mNeighborTable.FindNeighbor(aDestination);
             VerifyOrExit(neighbor != nullptr, error = kErrorInvalidState);
-            SuccessOrExit(error = Get<LinkMetrics::LinkMetrics>().AppendReport(*message, *aRequestMessage, *neighbor));
+            SuccessOrExit(error = Get<LinkMetrics::Subject>().AppendReport(*message, *aRequestMessage, *neighbor));
             break;
 #endif
         }
@@ -3254,7 +3278,7 @@ void MleRouter::RemoveNeighbor(Neighbor &aNeighbor)
         if (aNeighbor.IsFullThreadDevice())
         {
             // Clear all EID-to-RLOC entries associated with the child.
-            Get<AddressResolver>().Remove(aNeighbor.GetRloc16());
+            Get<AddressResolver>().RemoveEntriesForRloc16(aNeighbor.GetRloc16());
         }
 
         mChildTable.RemoveStoredChild(static_cast<Child &>(aNeighbor));
@@ -3674,6 +3698,21 @@ void MleRouter::SendAddressSolicitResponse(const Coap::Message    &aRequest,
     message = nullptr;
 
     Log(kMessageSend, kTypeAddressReply, aMessageInfo.GetPeerAddr());
+
+    // If assigning a new RLOC16 (e.g., on promotion of a child to
+    // router role) we clear any address cache entries associated
+    // with the old RLOC16.
+
+    if ((aResponseStatus == ThreadStatusTlv::kSuccess) && (aRouter != nullptr))
+    {
+        uint16_t oldRloc16;
+
+        VerifyOrExit(IsRoutingLocator(aMessageInfo.GetPeerAddr()));
+        oldRloc16 = aMessageInfo.GetPeerAddr().GetIid().GetLocator();
+
+        VerifyOrExit(oldRloc16 != aRouter->GetRloc16());
+        Get<AddressResolver>().RemoveEntriesForRloc16(oldRloc16);
+    }
 
 exit:
     FreeMessage(message);
