@@ -76,6 +76,16 @@
 #endif
 
 /**
+ * @def OPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE
+ *
+ * Define to 1 to enable CLI for the posix daemon.
+ *
+ */
+#ifndef OPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE
+#define OPENTHREAD_POSIX_CONFIG_DAEMON_CLI_ENABLE 1
+#endif
+
+/**
  * RCP bus UART.
  *
  * @note This value is also for simulated UART bus.
@@ -126,6 +136,23 @@
 #endif
 
 /**
+ * @def OPENTHREAD_POSIX_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
+ *
+ * Define as 1 to enable multicast routing support.
+ *
+ */
+#ifndef OPENTHREAD_POSIX_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
+#define OPENTHREAD_POSIX_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE \
+    OPENTHREAD_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
+#endif
+
+#if OPENTHREAD_POSIX_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE && \
+    !OPENTHREAD_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE
+#error \
+    "OPENTHREAD_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE is required for OPENTHREAD_POSIX_CONFIG_BACKBONE_ROUTER_MULTICAST_ROUTING_ENABLE"
+#endif
+
+/**
  * @def OPENTHREAD_POSIX_CONFIG_SECURE_SETTINGS_ENABLE
  *
  * Define as 1 to enable the secure settings. When defined to 1, the platform MUST implement the otPosixSecureSetting*
@@ -166,7 +193,7 @@
 /**
  * @def OPENTHREAD_POSIX_CONFIG_OMR_ROUTES_PRIORITY
  *
- * This macro defines the priority of OMR routes added to kernel. The larger the number, the lower the priority. We
+ * Defines the priority of OMR routes added to kernel. The larger the number, the lower the priority. We
  * need to assign a high priority to such routes so that kernel prefers the Thread link rather than infrastructure.
  * Otherwise we may unnecessarily transmit packets via infrastructure, which potentially causes looping issue.
  *
@@ -178,7 +205,7 @@
 /**
  * @def OPENTHREAD_POSIX_CONFIG_MAX_OMR_ROUTES_NUM
  *
- * This macro defines the max number of OMR routes that can be added to kernel.
+ * Defines the max number of OMR routes that can be added to kernel.
  *
  */
 #ifndef OPENTHREAD_POSIX_CONFIG_MAX_OMR_ROUTES_NUM
@@ -198,7 +225,7 @@
 /**
  * @def OPENTHREAD_POSIX_CONFIG_EXTERNAL_ROUTE_PRIORITY
  *
- * This macro defines the priority of external routes added to kernel. The larger the number, the lower the priority. We
+ * Defines the priority of external routes added to kernel. The larger the number, the lower the priority. We
  * need to assign a low priority to such routes so that kernel prefers the infra link rather than thread. Otherwise we
  * may unnecessarily transmit packets via thread, which potentially causes performance issue. In linux, normally infra
  * link routes' metric value is not greater than 1024, hence 65535 should be big enough.
@@ -211,7 +238,7 @@
 /**
  * @def OPENTHREAD_POSIX_CONFIG_MAX_EXTERNAL_ROUTE_NUM
  *
- * This macro defines the max number of external routes that can be added to kernel.
+ * Defines the max number of external routes that can be added to kernel.
  *
  */
 #ifndef OPENTHREAD_POSIX_CONFIG_MAX_EXTERNAL_ROUTE_NUM
@@ -250,6 +277,16 @@
 #ifndef OPENTHREAD_POSIX_CONFIG_IPSET_BINARY
 #define OPENTHREAD_POSIX_CONFIG_IPSET_BINARY "ipset"
 #endif
+#endif
+
+/**
+ * @def OPENTHREAD_POSIX_CONFIG_THREAD_NETIF_DEFAULT_NAME
+ *
+ * Define the Thread default network interface name.
+ *
+ */
+#ifndef OPENTHREAD_POSIX_CONFIG_THREAD_NETIF_DEFAULT_NAME
+#define OPENTHREAD_POSIX_CONFIG_THREAD_NETIF_DEFAULT_NAME "wpan0"
 #endif
 
 #ifdef __APPLE__
@@ -360,6 +397,16 @@
  */
 #ifndef OPENTHREAD_POSIX_CONFIG_PRODUCT_CONFIG_FILE
 #define OPENTHREAD_POSIX_CONFIG_PRODUCT_CONFIG_FILE "src/posix/platform/openthread.conf.example"
+#endif
+
+/**
+ * @def OPENTHREAD_POSIX_CONFIG_CONFIGURATION_FILE_ENABLE
+ *
+ * Define as 1 to enable the configuration file support.
+ *
+ */
+#ifndef OPENTHREAD_POSIX_CONFIG_CONFIGURATION_FILE_ENABLE
+#define OPENTHREAD_POSIX_CONFIG_CONFIGURATION_FILE_ENABLE 1
 #endif
 
 /**

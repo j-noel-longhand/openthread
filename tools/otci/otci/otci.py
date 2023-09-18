@@ -1369,7 +1369,7 @@ class OTCI(object):
     # TODO: csl period <period>
     # TODO: csl timeout <timeout>
 
-    _CSL_PERIOD_PATTERN = re.compile(r'(\d+)\(in units of 10 symbols\), \d+ms')
+    _CSL_PERIOD_PATTERN = re.compile(r'(\d+)us')
     _CSL_TIMEOUT_PATTERN = re.compile(r'(\d+)s')
 
     def get_csl_config(self) -> Dict[str, int]:
@@ -1398,7 +1398,7 @@ class OTCI(object):
         """Configure CSL parameters.
 
         :param channel: Set CSL channel.
-        :param period: Set CSL period in units of 10 symbols. Disable CSL by setting this parameter to 0.
+        :param period: Set CSL period in usec. Disable CSL by setting this parameter to 0.
         :param timeout: Set the CSL timeout in seconds.
         """
 
@@ -1738,7 +1738,7 @@ class OTCI(object):
         # Network Name: OpenThread-7caa
         # PAN ID: 0x7caa
         # PSKc: 167d89fd169e439ca0b8266de248090f
-        # Security Policy: 0, onrc
+        # Security Policy: 672 onrc 0
 
         dataset = {}
 
@@ -1765,7 +1765,7 @@ class OTCI(object):
             elif key == 'PSKc':
                 dataset['pskc'] = val
             elif key == 'Security Policy':
-                rotation_time, flags = val.split(', ') if ', ' in val else val.split(' ')
+                rotation_time, flags, version_threshold = val.split(' ')
                 rotation_time = int(rotation_time)
                 dataset['security_policy'] = SecurityPolicy(rotation_time, flags)
             else:
